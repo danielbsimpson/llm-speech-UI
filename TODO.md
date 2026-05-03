@@ -160,6 +160,54 @@ starling-local/
 
 ---
 
+### Stretch Goal — GraphRAG Knowledge Graph Memory
+
+Replace flat vector RAG with [Microsoft GraphRAG](https://github.com/microsoft/graphrag): a structured, hierarchical RAG system that builds a knowledge graph from your documents. Unlike baseline RAG (top-k vector similarity), GraphRAG extracts entities and relationships, clusters them into communities using the Leiden algorithm, and generates multi-level summaries — enabling the AI to answer holistic "what is this corpus about?" questions as well as specific entity-level lookups.
+
+#### Step 1 — Install & configure GraphRAG
+- [ ] `pip install graphrag` into `.venv`
+- [ ] Create a `memory/` folder as the GraphRAG data root (add `memory/output/` to `.gitignore`)
+- [ ] Run `graphrag init --root memory/` to scaffold `settings.yaml` and prompt templates
+- [ ] Configure `settings.yaml` to use Ollama as the LLM via the LiteLLM `openai`-compatible proxy:
+  - Set `api_base: http://localhost:11434/v1` and `model: ollama/<model_name>` in both `completion_models` and `embedding_models`
+  - Use `nomic-embed-text` (already pulled) for embeddings; use `llama3.1:8b` or `qwen2.5:7b` for completion
+  - Set `indexing_method: fast` initially to avoid heavy LLM usage during graph extraction — switch to `standard` (LLM-extracted entities) once it's working
+- [ ] Run `graphrag prompt-tune --root memory/` to auto-tune extraction prompts for the local model
+
+#### Step 2 — Build the document corpus
+- [ ] Create `memory/input/` as the watched document folder
+- [ ] Write a `scripts/export_conversations.py` script that appends each completed conversation turn to a dated `.txt` file in `memory/input/` (one file per session)
+- [ ] Decide on additional document sources to ingest: notes, project docs, README, etc.
+
+#### Step 3 — Index the corpus into a knowledge graph
+- [ ] Run the indexing pipeline: `graphrag index --root memory/`
+  - This extracts entities, relationships, and claims from all `.txt`/`.md` files in `memory/input/`
+  - Performs Leiden community detection to group related entities
+  - Generates hierarchical community summaries (bottom-up, multiple granularity levels)
+  - Outputs Parquet tables to `memory/output/` and embeddings to a local vector store
+- [ ] Add a `POST /memory/index` endpoint in `backend/main.py` that triggers re-indexing as a background task (using `asyncio.create_subprocess_exec` calling the graphrag CLI)
+
+#### Step 4 — Wire query into the chat pipeline
+- [ ] Add a `POST /memory/query` endpoint in `backend/main.py` that wraps the GraphRAG Python query API:
+  - **Local search**: for entity-specific questions — fans out from named entities to neighbors and associated claims
+  - **Global search**: for holistic/thematic questions — uses community summaries to synthesise a corpus-wide answer
+  - Accept a `mode: "local" | "global" | "drift"` parameter; default to `local`
+- [ ] In `backend/ollama.py`, before streaming the Ollama response, call `/memory/query` with the user's message
+- [ ] Prepend the returned graph context as a `system`-role message block in the conversation history sent to Ollama (keep it under ~2 000 tokens to stay within context window)
+
+#### Step 5 — Auto-index new conversations
+- [ ] After each complete assistant turn, append the exchange (user + assistant) to the current session file in `memory/input/`
+- [ ] Trigger an incremental re-index in the background (debounced — at most once every N minutes, configurable via `.env`)
+- [ ] Add a `GET /memory/status` endpoint returning the last index timestamp and entity/community counts from the Parquet output
+
+#### Step 6 — Surface memory in the HUD
+- [ ] Add a `MEMORY` stat chip to the header stats row (shows entity count or `OFF` when no index exists)
+- [ ] Show a subtle "memory active" indicator on the ring when graph context was injected into a response
+- [ ] Add a `MEMORY` button to the controls row that opens a simple panel listing: last indexed time, document count, top entities, and a manual "Re-index now" trigger
+- [ ] Display the active search mode (`LOCAL` / `GLOBAL`) in the footer alongside the TTS/STT labels
+
+---
+
 ## Stack Summary
 
 | Layer | Tool | Notes |
