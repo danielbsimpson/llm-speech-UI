@@ -9,17 +9,21 @@ const SYSTEM_PROMPT =
 let conversationHistory = [{ role: 'system', content: SYSTEM_PROMPT }];
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
-const starlingEl = document.getElementById('starling');
-const chatInner  = document.getElementById('chat-inner');
-const micBtn     = document.getElementById('mic-btn');
-const textInput  = document.getElementById('text-input');
-const sendBtn    = document.getElementById('send-btn');
-const clearBtn   = document.getElementById('clear-btn');
-const ringIcon   = document.getElementById('ring-icon');
-const ringState  = document.getElementById('ring-state');
-const statModel  = document.getElementById('stat-model');
-const statStatus = document.getElementById('stat-status');
-const waveformEl = document.getElementById('waveform');
+const starlingEl  = document.getElementById('starling');
+const chatInner   = document.getElementById('chat-inner');
+const micBtn      = document.getElementById('mic-btn');
+const textInput   = document.getElementById('text-input');
+const sendBtn     = document.getElementById('send-btn');
+const clearBtn    = document.getElementById('clear-btn');
+const ringIcon    = document.getElementById('ring-icon');
+const ringState   = document.getElementById('ring-state');
+const statModel   = document.getElementById('stat-model');
+const statStatus  = document.getElementById('stat-status');
+const waveformEl  = document.getElementById('waveform');
+const ttsToggle   = document.getElementById('tts-toggle');
+const voiceSelect = document.getElementById('voice-select');
+const ttsEngineEl = document.getElementById('tts-engine');
+const ftrTts      = document.getElementById('ftr-tts');
 
 // ── Waveform bars ─────────────────────────────────────────────────────────────
 const BAR_COUNT = 40;
@@ -160,9 +164,95 @@ async function sendToOllama(userText) {
   }
 }
 
-// ── Text-to-Speech (browser SpeechSynthesis) ─────────────────────────────────
-function speak(text) {
-  if (!window.speechSynthesis) return;
+// ── Text-to-Speech ────────────────────────────────────────────────────────────
+// State: 'kokoro' | 'browser' | 'off'
+let ttsMode  = localStorage.getItem('starling_tts_mode') || 'kokoro';
+let ttsVoice = localStorage.getItem('starling_tts_voice') || 'bm_george';
+
+function _applyTtsMode() {
+  if (ttsMode === 'off') {
+    ttsToggle.textContent    = 'TTS OFF';
+    ttsToggle.classList.add('tts-off');
+    voiceSelect.disabled     = true;
+    ttsEngineEl.textContent  = 'OFF';
+    if (ftrTts) ftrTts.textContent = 'Off';
+  } else if (ttsMode === 'browser') {
+    ttsToggle.textContent    = 'TTS: BROWSER';
+    ttsToggle.classList.remove('tts-off');
+    voiceSelect.disabled     = true;
+    ttsEngineEl.textContent  = 'BROWSER';
+    if (ftrTts) ftrTts.textContent = 'Web Speech';
+  } else {
+    ttsToggle.textContent    = 'TTS: KOKORO';
+    ttsToggle.classList.remove('tts-off');
+    voiceSelect.disabled     = false;
+    ttsEngineEl.textContent  = 'KOKORO';
+    if (ftrTts) ftrTts.textContent = 'Kokoro (local)';
+  }
+}
+
+// Cycle: kokoro → browser → off → kokoro
+ttsToggle.addEventListener('click', () => {
+  ttsMode = ttsMode === 'kokoro' ? 'browser' : ttsMode === 'browser' ? 'off' : 'kokoro';
+  localStorage.setItem('starling_tts_mode', ttsMode);
+  _applyTtsMode();
+});
+
+voiceSelect.addEventListener('change', () => {
+  ttsVoice = voiceSelect.value;
+  localStorage.setItem('starling_tts_voice', ttsVoice);
+});
+
+// Populate voice dropdown from /synthesize/voices
+async function loadVoices() {
+  try {
+    const res = await fetch(`${BACKEND_BASE}/synthesize/voices`);
+    if (!res.ok) return;
+    const voices = await res.json();
+    voiceSelect.innerHTML = '';
+    voices.forEach(v => {
+      const opt = document.createElement('option');
+      opt.value       = v.id;
+      opt.textContent = v.label;
+      if (v.id === ttsVoice) opt.selected = true;
+      voiceSelect.appendChild(opt);
+    });
+    // Ensure stored voice still exists; fall back to first option
+    if (!voices.find(v => v.id === ttsVoice)) {
+      ttsVoice = voices[0]?.id || 'bm_george';
+      voiceSelect.value = ttsVoice;
+      localStorage.setItem('starling_tts_voice', ttsVoice);
+    }
+  } catch { /* backend not running — leave static fallback option */ }
+}
+
+// Active audio element (so we can cancel mid-speech)
+let _activeAudio = null;
+
+async function _speakKokoro(text) {
+  setState('speaking');
+  try {
+    const res = await fetch(`${BACKEND_BASE}/synthesize/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, voice: ttsVoice, speed: 1.0 }),
+    });
+    if (!res.ok) throw new Error(`TTS ${res.status}`);
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    _activeAudio = audio;
+    audio.onended = () => { URL.revokeObjectURL(url); _activeAudio = null; setState('idle'); };
+    audio.onerror = () => { URL.revokeObjectURL(url); _activeAudio = null; setState('idle'); };
+    await audio.play();
+  } catch (err) {
+    console.warn('Kokoro TTS failed, falling back to browser SpeechSynthesis:', err);
+    _speakBrowser(text);
+  }
+}
+
+function _speakBrowser(text) {
+  if (!window.speechSynthesis) { setState('idle'); return; }
   window.speechSynthesis.cancel();
   const utt   = new SpeechSynthesisUtterance(text);
   utt.rate    = 0.95;
@@ -173,6 +263,18 @@ function speak(text) {
   window.speechSynthesis.speak(utt);
 }
 
+function stopSpeaking() {
+  if (_activeAudio) { _activeAudio.pause(); _activeAudio = null; }
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  setState('idle');
+}
+
+async function speak(text) {
+  if (ttsMode === 'off') return;
+  if (ttsMode === 'browser') { _speakBrowser(text); return; }
+  await _speakKokoro(text);
+}
+
 // ── Text send handler ─────────────────────────────────────────────────────────
 async function handleSend() {
   const text = textInput.value.trim();
@@ -180,7 +282,7 @@ async function handleSend() {
   textInput.value = '';
   appendMessage('user', text);
   const response = await sendToOllama(text);
-  if (response) speak(response);
+  if (response) await speak(response);
 }
 
 sendBtn.addEventListener('click', handleSend);
@@ -215,9 +317,15 @@ async function startRecording() {
     mediaRecorder.onstop = async () => {
       stopAudioViz();
       stream.getTracks().forEach(t => t.stop());
-      setState('transcribing');
 
       const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+      if (blob.size < 1024) {
+        setState('idle');   // recording was too short / empty — silently ignore
+        return;
+      }
+
+      setState('transcribing');
+
       const form = new FormData();
       form.append('audio', blob, 'recording.webm');
 
@@ -228,7 +336,7 @@ async function startRecording() {
         if (!transcript) { setState('idle'); return; }
         appendMessage('user', transcript);
         const response = await sendToOllama(transcript);
-        if (response) speak(response);
+        if (response) await speak(response);
       } catch (err) {
         appendMessage('assistant', `[STT error: ${err.message}]`);
         setState('error');
@@ -278,6 +386,8 @@ document.addEventListener('keyup', e => {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 statModel.textContent = MODEL;
+_applyTtsMode();
+loadVoices();
 appendMessage('assistant',
   `All systems nominal. S.T.A.R.L.I.N.G. online — running ${MODEL} on GPU via Ollama. How can I assist?`);
 setState('idle');

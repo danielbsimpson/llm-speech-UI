@@ -70,11 +70,15 @@ starling-local/
 - [ ] Let user pick voice from available system voices
 - [ ] Tune `rate`, `pitch`, and `volume` for a robotic S.T.A.R.L.I.N.G. feel
 
-### Option B — Kokoro TTS (best local quality)
-- [ ] Install Kokoro: `pip install kokoro-onnx`
-- [ ] Write `backend/tts.py` with a `/synthesize` POST endpoint
-- [ ] Return audio as WAV/MP3, play via `<audio>` element in frontend
-- [ ] Pick a voice that fits the S.T.A.R.L.I.N.G. aesthetic
+### Option B — Kokoro TTS (best local quality) ✅ CHOSEN
+- [x] Install Kokoro: `pip install "kokoro-onnx[gpu]"` (v0.5.0, GPU-accelerated)
+- [x] Write `backend/tts.py` with `/synthesize` POST endpoint and `/synthesize/voices` GET endpoint
+- [x] Return audio as WAV, play via `<Audio>` element in frontend
+- [x] 16 curated English voices (US/GB, male/female) selectable from UI dropdown
+- [x] TTS mode toggle: Kokoro → Browser → Off (persisted in localStorage)
+- [x] Auto-fallback to browser SpeechSynthesis if Kokoro backend unavailable
+- [x] Model download script: `python scripts/download_models.py` (~330 MB)
+- [ ] Download models: run `python scripts/download_models.py`
 
 ### Option C — Piper TTS (fastest, lower quality)
 - [ ] Download Piper binary from GitHub releases

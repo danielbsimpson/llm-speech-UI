@@ -13,9 +13,25 @@ router = APIRouter(prefix="/transcribe", tags=["stt"])
 _WHISPER_MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "base")
 _DEVICE = os.getenv("WHISPER_DEVICE", "cuda")
 
-# Holds the active model; may be replaced at runtime if CUDA fails during inference.
+# Pre-validate CUDA availability so we don't get a noisy crash on first inference.
+# faster-whisper needs ctranslate2's CUDA support + cublas64_12.dll on Windows.
+def _resolve_device(requested: str) -> str:
+    if requested != "cuda":
+        return requested
+    try:
+        import ctranslate2
+        if ctranslate2.get_cuda_device_count() < 1:
+            raise RuntimeError("no CUDA devices")
+        # Quick dummy encode to surface missing DLL before the first real request.
+        _test = ctranslate2.StorageView([1], dtype=ctranslate2.DataType.int8, device="cuda")
+        return "cuda"
+    except Exception as exc:
+        logger.warning("CUDA unavailable for Whisper (%s) — using CPU/int8.", exc)
+        return "cpu"
+
+_active_device: str = _resolve_device(_DEVICE)
+# Holds the active model; lazy-loaded on first request.
 _model: WhisperModel | None = None
-_active_device: str = _DEVICE
 
 
 def _build_model(device: str) -> WhisperModel:
@@ -60,8 +76,12 @@ async def transcribe(audio: UploadFile = File(...)):
         )
 
     suffix = ".webm" if "webm" in content_type else ".wav"
+    data = await audio.read()
+    if len(data) < 1024:          # anything under 1 KB is noise / an empty recording
+        raise HTTPException(status_code=400, detail="Audio blob too small — was the recording too short?")
+
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        tmp.write(await audio.read())
+        tmp.write(data)
         tmp_path = tmp.name
 
     try:
@@ -75,6 +95,10 @@ async def transcribe(audio: UploadFile = File(...)):
             _model = _build_model("cpu")
             _active_device = "cpu"
             transcript, info = _run_transcribe(_model, tmp_path)
+        except Exception as exc:
+            if "End of file" in str(exc) or "EOFError" in type(exc).__name__:
+                raise HTTPException(status_code=400, detail="Audio file appears to be empty or corrupt.")
+            raise
 
         logger.info("Transcribed %.1fs: %s", info.duration, transcript[:80])
     finally:

@@ -77,6 +77,15 @@
       <div class="chat-inner" id="chat-inner"></div>
     </div>
 
+    <!-- TTS settings bar -->
+    <div class="tts-bar" id="tts-bar">
+      <button class="tts-toggle" id="tts-toggle" title="Toggle text-to-speech">TTS ON</button>
+      <select class="voice-select" id="voice-select" title="Kokoro voice">
+        <option value="bm_george">George (GB ♂)</option>
+      </select>
+      <div class="tts-engine" id="tts-engine">KOKORO</div>
+    </div>
+
     <!-- Controls -->
     <div class="controls">
       <button class="mic-btn" id="mic-btn" title="Hold to speak — or hold Space">
@@ -100,7 +109,7 @@
     <footer class="ftr">
       <div class="ftr-item">OLLAMA <span>localhost:11434</span></div>
       <div class="ftr-item">STT <span>Whisper (local)</span></div>
-      <div class="ftr-item">TTS <span>Web Speech</span></div>
+      <div class="ftr-item">TTS <span id="ftr-tts">Kokoro (local)</span></div>
       <div class="ftr-item">SPACE <span>push-to-talk</span></div>
     </footer>
 

@@ -15,13 +15,11 @@ app.add_middleware(
 
 from stt import router as stt_router
 from ollama import router as ollama_router
+from tts import router as tts_router
 
 app.include_router(stt_router)
 app.include_router(ollama_router)
-
-# Uncomment when TTS is implemented:
-# from tts import router as tts_router
-# app.include_router(tts_router)
+app.include_router(tts_router)
 
 
 @app.get("/health")

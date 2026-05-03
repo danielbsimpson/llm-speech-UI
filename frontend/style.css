@@ -350,3 +350,52 @@ html, body {
 .starling.state-error .corner       { border-color: #ff4d6d; opacity: 0.65; }
 .starling.state-error .ring-state   { color: #ff4d6d; }
 .starling.state-error .stat-val#stat-status { color: #ff4d6d; }
+
+/* ── TTS bar ─────────────────────────────────────────────────────────────── */
+.tts-bar {
+  display: flex; align-items: center; gap: 8px;
+  flex-shrink: 0; position: relative; z-index: 1;
+  margin-bottom: 8px;
+}
+
+.tts-toggle {
+  height: 28px; padding: 0 10px;
+  background: rgba(0,212,255,0.06);
+  border: 0.5px solid rgba(0,212,255,0.22);
+  border-radius: 5px; color: var(--g);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px; letter-spacing: 1.5px; cursor: pointer; flex-shrink: 0;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+.tts-toggle:hover {
+  background: rgba(0,212,255,0.12); border-color: var(--c);
+}
+.tts-toggle.tts-off {
+  color: rgba(0,212,255,0.28);
+  border-color: rgba(0,212,255,0.1);
+}
+
+.voice-select {
+  flex: 1; height: 28px; padding: 0 8px;
+  background: rgba(0,212,255,0.04);
+  border: 0.5px solid rgba(0,212,255,0.16);
+  border-radius: 5px; color: var(--c);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px; letter-spacing: 0.5px; cursor: pointer; outline: none;
+  transition: border-color 0.2s, background 0.2s;
+  /* Style the dropdown arrow */
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='rgba(0,212,255,0.4)'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 24px;
+}
+.voice-select:focus  { border-color: rgba(0,212,255,0.38); background: rgba(0,212,255,0.07); }
+.voice-select:disabled { opacity: 0.3; cursor: default; }
+.voice-select option { background: #000d1a; color: var(--c); }
+
+.tts-engine {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 8px; letter-spacing: 2px;
+  color: rgba(0,255,204,0.38); flex-shrink: 0; min-width: 50px; text-align: right;
+}

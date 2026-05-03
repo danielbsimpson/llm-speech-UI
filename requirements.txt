@@ -5,7 +5,5 @@ python-dotenv>=1.0.0
 pydantic>=2.0.0
 python-multipart>=0.0.9
 faster-whisper>=1.0.0
-
-# Uncomment when ready:
-# kokoro-onnx>=0.3.0
-# soundfile>=0.12.1
+kokoro-onnx[gpu]>=0.5.0
+soundfile>=0.13.0
