@@ -4,6 +4,20 @@ A voice-driven, S.T.A.R.L.I.N.G.-style web interface powered by a local LLM via 
 
 ---
 
+## Current Issues
+
+| # | Component | Description | Suspected Cause |
+|---|---|---|---|
+| 1 | TTS (Kokoro) | Speech playback is noticeably lagged behind text appearing in the UI — the full LLM response streams and renders, then a long pause occurs before audio begins | Kokoro synthesis runs synchronously on the full response string after streaming completes; cold-start ONNX inference on CPU takes 2–8 s per call |
+| 2 | TTS / STT GPU utilisation | CPU usage spikes sharply during Kokoro synthesis and Whisper transcription but GPU VRAM/utilisation shows no change — neither pipeline appears to be dispatching work to the GPU | `kokoro-onnx[gpu]` requires `onnxruntime-gpu` with matching CUDA/cuDNN versions; Whisper CUDA fell back to CPU at startup due to missing `cublas64_12.dll` (CUDA 12 library absent from this install). Both are currently running on CPU/int8 |
+
+**Potential fixes to investigate:**
+- **TTS lag**: implement sentence-chunked TTS — split the streamed response on `.`, `?`, `!` boundaries and synthesise + play each sentence as it completes rather than waiting for the full response (see Phase 7)
+- **GPU for Kokoro**: verify `onnxruntime-gpu` version matches installed CUDA runtime; may need `onnxruntime-gpu==1.17.x` pinned to CUDA 11.8, or install CUDA 12.x + cuDNN 9.x to match what `kokoro-onnx[gpu]` expects
+- **GPU for Whisper**: install `cublas64_12.dll` (part of CUDA Toolkit 12.x) or downgrade `faster-whisper` to a build targeting CUDA 11.8
+
+---
+
 ## Phase 1 — Repo Setup
 
 - [x] Initialize repository: `git init llm-speech-ui`
