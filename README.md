@@ -1,10 +1,12 @@
 # Speech to text Local AI Interface
 
-A voice-driven, JARVIS-style web interface powered entirely by a local LLM running on your GPU. No cloud APIs. No subscriptions. Just your hardware.
+A voice-driven, REMI (Responsive Embedded Machine Intelligence) web interface powered entirely by a local LLM running on your GPU. No cloud APIs. No subscriptions. Just your hardware.
 
 ```
 Microphone → Speech-to-Text → Ollama (LLM on GPU) → Text-to-Speech → Browser UI
 ```
+
+![REMI UI](assets/images/REMI_UI_example.png)
 
 ---
 
@@ -15,7 +17,7 @@ Microphone → Speech-to-Text → Ollama (LLM on GPU) → Text-to-Speech → Bro
 - 🔊 **Text-to-speech** via browser SpeechSynthesis or Kokoro TTS
 - 📡 **Streaming responses** — tokens render as they arrive
 - 💬 **Multi-turn conversation** with persistent context
-- 🖥 **JARVIS-style HUD** — dark interface with animated waveform and arc rings
+- 🖥 **REMI HUD** — dark interface with animated waveform and arc rings
 - 🔒 **Fully local** — no data leaves your machine
 
 ---
@@ -49,14 +51,14 @@ Microphone → Speech-to-Text → Ollama (LLM on GPU) → Text-to-Speech → Bro
 | `phi4-mini` | 2.5 GB | Microsoft, strong reasoning for its size |
 | `nomic-embed-text` | 274 MB | Embedding model (for future RAG) |
 
-Change the active model by setting `OLLAMA_MODEL` in `.env` or `localStorage.setItem('jarvis_model', 'mistral:7b')` in the browser console.
+Change the active model by setting `OLLAMA_MODEL` in `.env` or `localStorage.setItem('remi_model', 'mistral:7b')` in the browser console.
 
 ---
 
 ## Project Structure
 
 ```
-jarvis-local/
+remi-local/
 ├── frontend/           # UI — HTML/CSS/JS (or React + Vite)
 │   ├── index.html
 │   ├── style.css
@@ -95,8 +97,8 @@ ollama run llama3
 ### 2. Clone the repo
 
 ```bash
-git clone https://github.com/yourname/jarvis-local.git
-cd jarvis-local
+git clone https://github.com/yourname/remi-local.git
+cd remi-local
 ```
 
 ### 3a. Frontend only (easiest — no Python needed)
@@ -140,7 +142,7 @@ Copy `.env.example` to `.env` and edit as needed:
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=llama3
 OLLAMA_TEMPERATURE=0.7
-OLLAMA_SYSTEM_PROMPT="You are JARVIS, a highly capable AI assistant. Be concise, precise, and helpful."
+OLLAMA_SYSTEM_PROMPT="You are REMI (Responsive Embedded Machine Intelligence), a highly capable local AI assistant. Be concise, precise, and helpful."
 
 # Speech-to-text
 STT_ENGINE=whisper          # whisper | browser

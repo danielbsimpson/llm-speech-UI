@@ -1,6 +1,6 @@
-# JARVIS Local AI Interface — Project TODO
+# REMI — Responsive Embedded Machine Intelligence
 
-A voice-driven, JARVIS-style web interface powered by a local LLM via Ollama.
+A voice-driven, REMI-style web interface powered by a local LLM via Ollama.
 
 ---
 
@@ -14,7 +14,7 @@ A voice-driven, JARVIS-style web interface powered by a local LLM via Ollama.
 - [x] Add `LICENSE` file (MIT)
 
 ```
-jarvis-local/
+remi-local/
 ├── frontend/           # HTML/CSS/JS or React app
 │   ├── index.html
 │   ├── style.css
@@ -42,7 +42,7 @@ jarvis-local/
 - [x] Test the REST API manually: confirmed working (`llama3.1:8b` responds correctly)
 - [x] Document recommended models + VRAM requirements in README
 - [x] Add model config to `.env` (model name, API base URL, temperature, system prompt)
-- [x] Optionally write a system prompt to give the AI a "JARVIS" persona
+- [x] Optionally write a system prompt to give the AI a "REMI" persona
 
 ---
 
@@ -68,13 +68,13 @@ jarvis-local/
 ### Option A — Browser SpeechSynthesis (easiest)
 - [ ] Implement `SpeechSynthesisUtterance` in `app.js`
 - [ ] Let user pick voice from available system voices
-- [ ] Tune `rate`, `pitch`, and `volume` for a robotic JARVIS feel
+- [ ] Tune `rate`, `pitch`, and `volume` for a robotic REMI feel
 
 ### Option B — Kokoro TTS (best local quality)
 - [ ] Install Kokoro: `pip install kokoro-onnx`
 - [ ] Write `backend/tts.py` with a `/synthesize` POST endpoint
 - [ ] Return audio as WAV/MP3, play via `<audio>` element in frontend
-- [ ] Pick a voice that fits the JARVIS aesthetic
+- [ ] Pick a voice that fits the REMI aesthetic
 
 ### Option C — Piper TTS (fastest, lower quality)
 - [ ] Download Piper binary from GitHub releases
@@ -129,7 +129,7 @@ jarvis-local/
 - [ ] Add settings panel: switch models, change voice, adjust temperature
 - [ ] Add conversation export (save chat to .txt or .md)
 - [ ] Add auto-scroll to bottom of chat on new messages
-- [ ] Optional: wake word detection ("Hey JARVIS") using Web Audio API
+- [ ] Optional: wake word detection ("Hey REMI") using Web Audio API
 - [ ] Optional: sound effects on mic activate / response start
 
 ---

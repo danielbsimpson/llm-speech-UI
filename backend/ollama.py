@@ -12,7 +12,7 @@ OLLAMA_BASE = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 DEFAULT_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
 SYSTEM_PROMPT = os.getenv(
     "OLLAMA_SYSTEM_PROMPT",
-    "You are JARVIS, a highly capable AI assistant created to serve. Be concise, precise, and direct. Avoid unnecessary pleasantries.",
+    "You are REMI (Responsive Embedded Machine Intelligence), a highly capable local AI assistant. Be concise, precise, and direct. Avoid unnecessary pleasantries.",
 )
 
 

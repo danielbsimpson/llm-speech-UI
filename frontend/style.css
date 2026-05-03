@@ -20,7 +20,7 @@ html, body {
 }
 
 /* ── Container ───────────────────────────────────────────────────────────── */
-.jarvis {
+.remi {
   position: relative;
   width:  clamp(320px, 100vw,  860px);
   height: clamp(500px, 100vh,  790px);
@@ -57,7 +57,7 @@ html, body {
   border-color: var(--c); border-style: solid;
   opacity: 0.4; transition: opacity 0.4s; pointer-events: none;
 }
-.jarvis:hover .corner { opacity: 0.72; }
+.remi:hover .corner { opacity: 0.72; }
 .corner.tl { top: 14px;    left: 14px;  border-width: 2px 0 0 2px; border-radius: 2px 0 0 0; }
 .corner.tr { top: 14px;    right: 14px; border-width: 2px 2px 0 0; border-radius: 0 2px 0 0; }
 .corner.bl { bottom: 14px; left: 14px;  border-width: 0 0 2px 2px; border-radius: 0 0 0 2px; }
@@ -77,6 +77,11 @@ html, body {
 .hdr-name {
   font-size: 22px; font-weight: 600; letter-spacing: 4px; color: var(--c);
   text-shadow: 0 0 28px rgba(0,212,255,0.4), 0 0 64px rgba(0,212,255,0.1);
+}
+.hdr-fullname {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 8px; letter-spacing: 2.5px;
+  color: rgba(0,212,255,0.28); text-transform: uppercase; margin-top: 3px;
 }
 .hdr-stats { display: flex; gap: 20px; align-items: flex-end; }
 .stat { text-align: right; }
@@ -106,14 +111,14 @@ html, body {
 @keyframes ring-drift { to { transform: rotate(360deg); } }
 
 /* Override: fast spin while thinking */
-.jarvis.state-thinking .ring-svg {
+.remi.state-thinking .ring-svg {
   filter: drop-shadow(0 0 10px rgba(0,255,204,0.4));
   animation: ring-spin 2.4s linear infinite;
 }
 @keyframes ring-spin { to { transform: rotate(360deg); } }
 
 /* Glow while listening */
-.jarvis.state-listening .ring-svg {
+.remi.state-listening .ring-svg {
   filter: drop-shadow(0 0 16px rgba(0,212,255,0.55));
   animation-duration: 8s; /* slow drift while listening */
 }
@@ -129,7 +134,7 @@ html, body {
   0%   { opacity: 0.65; transform: scale(0.93); }
   100% { opacity: 0;    transform: scale(1.08); }
 }
-.jarvis.state-listening .pulse-ring {
+.remi.state-listening .pulse-ring {
   border-color: rgba(0,212,255,0.3);
   animation-duration: 1.3s;
 }
@@ -145,7 +150,7 @@ html, body {
   filter: drop-shadow(0 0 8px rgba(0,212,255,0.6));
   transition: transform 0.3s, filter 0.3s;
 }
-.jarvis.state-listening .ring-icon {
+.remi.state-listening .ring-icon {
   filter: drop-shadow(0 0 18px rgba(0,212,255,1));
   transform: scale(1.14);
 }
@@ -155,9 +160,9 @@ html, body {
   color: rgba(0,212,255,0.42); text-transform: uppercase;
   transition: color 0.3s;
 }
-.jarvis.state-listening .ring-state { color: var(--c); }
-.jarvis.state-thinking  .ring-state { color: var(--g); }
-.jarvis.state-speaking  .ring-state { color: var(--g); }
+.remi.state-listening .ring-state { color: var(--c); }
+.remi.state-thinking  .ring-state { color: var(--g); }
+.remi.state-speaking  .ring-state { color: var(--g); }
 
 /* ── Waveform ────────────────────────────────────────────────────────────── */
 .waveform {
@@ -170,9 +175,9 @@ html, body {
   opacity: 0.18; min-height: 3px;
   transition: height 0.07s ease, opacity 0.3s;
 }
-.jarvis.state-listening .bar { opacity: 0.88; }
-.jarvis.state-thinking  .bar { opacity: 0.3; }
-.jarvis.state-speaking  .bar {
+.remi.state-listening .bar { opacity: 0.88; }
+.remi.state-thinking  .bar { opacity: 0.3; }
+.remi.state-speaking  .bar {
   opacity: 0.55;
   animation: speak-wave 1.6s ease-in-out infinite alternate;
 }
@@ -342,6 +347,6 @@ html, body {
 .ftr-item span { color: rgba(0,255,204,0.4); margin-left: 4px; }
 
 /* ── Error state ─────────────────────────────────────────────────────────── */
-.jarvis.state-error .corner       { border-color: #ff4d6d; opacity: 0.65; }
-.jarvis.state-error .ring-state   { color: #ff4d6d; }
-.jarvis.state-error .stat-val#stat-status { color: #ff4d6d; }
+.remi.state-error .corner       { border-color: #ff4d6d; opacity: 0.65; }
+.remi.state-error .ring-state   { color: #ff4d6d; }
+.remi.state-error .stat-val#stat-status { color: #ff4d6d; }

@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-app = FastAPI(title="JARVIS Backend")
+app = FastAPI(title="REMI Backend")
 
 app.add_middleware(
     CORSMiddleware,
