@@ -6,12 +6,12 @@ A voice-driven, JARVIS-style web interface powered by a local LLM via Ollama.
 
 ## Phase 1 — Repo Setup
 
-- [ ] Initialize repository: `git init jarvis-local`
-- [ ] Create folder structure (see below)
-- [ ] Add `.gitignore` (node_modules, __pycache__, .env, models/)
-- [ ] Add `README.md` with project overview and setup instructions
-- [ ] Pin Python version with `.python-version` or `pyproject.toml`
-- [ ] Add `LICENSE` file
+- [x] Initialize repository: `git init llm-speech-ui`
+- [x] Create folder structure (see below)
+- [x] Add `.gitignore` (node_modules, __pycache__, .env, models/)
+- [x] Add `README.md` with project overview and setup instructions
+- [x] Pin Python version with `.python-version` (set to 3.11)
+- [x] Add `LICENSE` file (MIT)
 
 ```
 jarvis-local/
@@ -36,9 +36,9 @@ jarvis-local/
 
 ## Phase 2 — LLM Backend (Ollama)
 
-- [ ] Install Ollama: `curl -fsSL https://ollama.com/install.sh | sh`
-- [ ] Pull a base model: `ollama pull llama3` (or mistral, gemma2, phi3)
-- [ ] Verify GPU is being used: `ollama run llama3` and check `nvidia-smi`
+- [x] Install Ollama: already installed from other local builds
+- [x] Pull a base model: several models already downloaded and available
+- [x] Verify GPU is being used: GPU-accelerated inference confirmed working
 - [ ] Test the REST API manually:
   ```bash
   curl http://localhost:11434/api/generate \
