@@ -1,4 +1,4 @@
-# J.A.R.V.I.S. Local AI Interface
+# Speech to text Local AI Interface
 
 A voice-driven, JARVIS-style web interface powered entirely by a local LLM running on your GPU. No cloud APIs. No subscriptions. Just your hardware.
 
@@ -30,12 +30,26 @@ Microphone → Speech-to-Text → Ollama (LLM on GPU) → Text-to-Speech → Bro
 
 ### Recommended GPU / model pairings
 
-| GPU VRAM | Recommended model |
-|---|---|
-| 6 GB | `llama3:8b`, `mistral:7b` |
-| 8 GB | `gemma2:9b`, `llama3:8b` |
-| 16 GB | `llama3:13b`, `mistral:12b` |
-| 40 GB+ | `llama3:70b` |
+| GPU VRAM | Recommended model | Pull command |
+|---|---|---|
+| 4–6 GB | `gemma3:4b`, `phi4-mini`, `llama3.2:3b` | `ollama pull gemma3:4b` |
+| 6–8 GB | `llama3.1:8b`, `mistral:7b`, `qwen2.5:7b` | `ollama pull llama3.1:8b` |
+| 10–16 GB | `llama3.1:13b`, `mistral:12b` | `ollama pull llama3.1:13b` |
+| 40 GB+ | `llama3.1:70b` | `ollama pull llama3.1:70b` |
+
+### Currently installed models
+
+| Model | Size | Notes |
+|---|---|---|
+| `llama3.1:8b` | 4.9 GB | **Default** — strong general purpose |
+| `mistral:7b` | 4.4 GB | Fast, good instruction following |
+| `qwen2.5:7b` | 4.7 GB | Strong coding and reasoning |
+| `gemma3:4b` | 3.3 GB | Lightweight, good for low VRAM |
+| `llama3.2:3b` | 2.0 GB | Fastest response times |
+| `phi4-mini` | 2.5 GB | Microsoft, strong reasoning for its size |
+| `nomic-embed-text` | 274 MB | Embedding model (for future RAG) |
+
+Change the active model by setting `OLLAMA_MODEL` in `.env` or `localStorage.setItem('jarvis_model', 'mistral:7b')` in the browser console.
 
 ---
 

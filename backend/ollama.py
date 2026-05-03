@@ -9,7 +9,11 @@ from pydantic import BaseModel
 router = APIRouter(prefix="/chat", tags=["ollama"])
 
 OLLAMA_BASE = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-DEFAULT_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
+DEFAULT_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
+SYSTEM_PROMPT = os.getenv(
+    "OLLAMA_SYSTEM_PROMPT",
+    "You are JARVIS, a highly capable AI assistant created to serve. Be concise, precise, and direct. Avoid unnecessary pleasantries.",
+)
 
 
 class Message(BaseModel):
@@ -36,9 +40,13 @@ async def _stream_ollama(payload: dict):
 
 @router.post("/")
 async def chat(req: ChatRequest):
+    messages = [m.model_dump() for m in req.messages]
+    # Prepend system prompt if the first message isn't already a system message
+    if not messages or messages[0].get("role") != "system":
+        messages.insert(0, {"role": "system", "content": SYSTEM_PROMPT})
     payload = {
         "model": req.model,
-        "messages": [m.model_dump() for m in req.messages],
+        "messages": messages,
         "options": {"temperature": req.temperature},
         "stream": True,
     }

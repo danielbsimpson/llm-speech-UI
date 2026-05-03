@@ -39,14 +39,10 @@ jarvis-local/
 - [x] Install Ollama: already installed from other local builds
 - [x] Pull a base model: several models already downloaded and available
 - [x] Verify GPU is being used: GPU-accelerated inference confirmed working
-- [ ] Test the REST API manually:
-  ```bash
-  curl http://localhost:11434/api/generate \
-    -d '{"model":"llama3","prompt":"Hello","stream":false}'
-  ```
-- [ ] Document recommended models + VRAM requirements in README
-- [ ] Add model config to `.env` (model name, API base URL, temperature)
-- [ ] Optionally write a system prompt to give the AI a "JARVIS" persona
+- [x] Test the REST API manually: confirmed working (`llama3.1:8b` responds correctly)
+- [x] Document recommended models + VRAM requirements in README
+- [x] Add model config to `.env` (model name, API base URL, temperature, system prompt)
+- [x] Optionally write a system prompt to give the AI a "JARVIS" persona
 
 ---
 

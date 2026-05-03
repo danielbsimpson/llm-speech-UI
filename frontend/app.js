@@ -1,9 +1,13 @@
 // ── Config ──────────────────────────────────────────────────────────────────
 const OLLAMA_BASE = 'http://localhost:11434';
-const MODEL = localStorage.getItem('jarvis_model') || 'llama3';
+const MODEL = localStorage.getItem('jarvis_model') || 'llama3.1:8b';
+const SYSTEM_PROMPT =
+  'You are JARVIS, a highly capable AI assistant created to serve. Be concise, precise, and direct. Avoid unnecessary pleasantries.';
 
 // ── State ────────────────────────────────────────────────────────────────────
-let conversationHistory = [];
+let conversationHistory = [
+  { role: 'system', content: SYSTEM_PROMPT },
+];
 
 // ── DOM refs ─────────────────────────────────────────────────────────────────
 const chatWindow = document.getElementById('chat-window');
