@@ -18,10 +18,16 @@ log = logging.getLogger(__name__)
 router = APIRouter(prefix="/synthesize", tags=["tts"])
 
 # ── Log active ONNX provider at import time so it shows in server startup output ─
-_onnx_provider = os.getenv("ONNX_PROVIDER")
 _available = _ort.get_available_providers()
+# Default to DmlExecutionProvider (DirectML/GPU) if available and env not overridden.
+# kokoro-onnx only activates GPU automatically for onnxruntime-gpu; with
+# onnxruntime-directml the ONNX_PROVIDER env var must be set explicitly.
+_GPU_PROVIDERS = ("CUDAExecutionProvider", "TensorrtExecutionProvider",
+                  "ROCMExecutionProvider", "DmlExecutionProvider")
+_default_provider = next((p for p in _GPU_PROVIDERS if p in _available), None)
+_onnx_provider = os.getenv("ONNX_PROVIDER", _default_provider)
 if _onnx_provider:
-    log.info("Kokoro ONNX provider (from env): %s", _onnx_provider)
+    log.info("Kokoro ONNX provider: %s", _onnx_provider)
 else:
     log.info("Kokoro ONNX provider (auto): %s — set ONNX_PROVIDER to override", _available[0])
 

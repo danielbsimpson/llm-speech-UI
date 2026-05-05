@@ -16,6 +16,8 @@ A voice-driven, S.T.A.R.L.I.N.G.-style web interface powered by a local LLM via 
 - **GPU for Kokoro**: verify `onnxruntime-gpu` version matches installed CUDA runtime; may need `onnxruntime-gpu==1.17.x` pinned to CUDA 11.8, or install CUDA 12.x + cuDNN 9.x to match what `kokoro-onnx[gpu]` expects
 - **GPU for Whisper**: install `cublas64_12.dll` (part of CUDA Toolkit 12.x) or downgrade `faster-whisper` to a build targeting CUDA 11.8
 
+**Monitoring**: The `/system-status` endpoint and footer device badges (added May 2026) now surface GPU vs CPU state for all three pipelines in real time after each exchange, making it easy to verify when GPU dispatch is fixed.
+
 ---
 
 ## Phase 1 — Repo Setup
@@ -118,35 +120,38 @@ starling-local/
 
 ## Phase 6 — FastAPI Backend (glue layer)
 
-- [ ] Install FastAPI: `pip install fastapi uvicorn python-dotenv`
-- [ ] Create `backend/main.py` with route structure
-- [ ] Add `/chat` endpoint that accepts text and streams Ollama response
-- [ ] Add `/transcribe` endpoint (if using Whisper)
-- [ ] Add `/synthesize` endpoint (if using local TTS)
-- [ ] Enable CORS for local frontend (`localhost:3000` or file://)
-- [ ] Load config from `.env` (model name, API URL, etc.)
-- [ ] Add basic error handling and logging
+- [x] Install FastAPI: `pip install fastapi uvicorn python-dotenv`
+- [x] Create `backend/main.py` with route structure
+- [x] Add `/chat` endpoint that accepts text and streams Ollama response
+- [x] Add `/transcribe` endpoint (Whisper STT)
+- [x] Add `/synthesize` endpoint (Kokoro TTS) + `/synthesize/voices` GET
+- [x] Add `/health` endpoint
+- [x] Add `/system-status` endpoint — reports GPU vs CPU for Whisper, Kokoro, and Ollama; polled by the frontend after each exchange and shown as colour-coded badges in the footer
+- [x] Enable CORS for local frontend
+- [x] Load config from `.env` (model name, API URL, temperature, system prompt, WHISPER_DEVICE, ONNX_PROVIDER)
+- [x] Add basic error handling and logging (CUDA fallback in stt.py and tts.py)
 
 ---
 
 ## Phase 7 — Streaming & Integration
 
-- [ ] Implement streaming response from Ollama in frontend (`ReadableStream`)
-- [ ] Render tokens as they arrive (typewriter effect)
-- [ ] Maintain conversation history array for multi-turn context
-- [ ] Pass full conversation history in each Ollama request
-- [ ] Add a "clear conversation" button
-- [ ] Start TTS only after full response is received (or implement sentence-chunked TTS)
+- [x] Implement streaming response from Ollama in frontend (`ReadableStream`)
+- [x] Render tokens as they arrive (typewriter effect with blinking cursor)
+- [x] Maintain conversation history array for multi-turn context
+- [x] Pass full conversation history in each Ollama request
+- [x] Add a “clear conversation” button
+- [ ] Start TTS only after full response is received — **done**; sentence-chunked TTS still pending (see Issue #1)
 
 ---
 
 ## Phase 8 — Polish & UX
 
-- [ ] Add loading/thinking animation while LLM is processing
-- [ ] Show error messages in UI (model not found, Ollama offline, etc.)
+- [x] Add loading/thinking animation while LLM is processing (ring spin + state machine)
+- [x] Show error messages in UI (model not found, Ollama offline, STT/TTS errors)
+- [x] Add auto-scroll to bottom of chat on new messages
+- [x] Per-model GPU/CPU device indicators in footer (Whisper / Kokoro / Ollama badges, updated after each exchange)
 - [ ] Add settings panel: switch models, change voice, adjust temperature
 - [ ] Add conversation export (save chat to .txt or .md)
-- [ ] Add auto-scroll to bottom of chat on new messages
 - [ ] Optional: wake word detection ("Hey STARLING") using Web Audio API
 - [ ] Optional: sound effects on mic activate / response start
 

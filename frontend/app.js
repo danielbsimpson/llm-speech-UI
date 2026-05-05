@@ -24,6 +24,26 @@ const ttsToggle   = document.getElementById('tts-toggle');
 const voiceSelect = document.getElementById('voice-select');
 const ttsEngineEl = document.getElementById('tts-engine');
 const ftrTts      = document.getElementById('ftr-tts');
+const ftrWhisperDev = document.getElementById('ftr-whisper-dev');
+const ftrKokoroDev  = document.getElementById('ftr-kokoro-dev');
+const ftrOllamaDev  = document.getElementById('ftr-ollama-dev');
+
+// ── System status ────────────────────────────────────────────────────────────
+async function fetchSystemStatus() {
+  try {
+    const res = await fetch(`${BACKEND_BASE}/system-status`);
+    if (!res.ok) return;
+    const { whisper, kokoro, ollama } = await res.json();
+    function setDev(el, val) {
+      if (!el) return;
+      el.textContent = val;
+      el.dataset.dev  = val;
+    }
+    setDev(ftrWhisperDev, whisper);
+    setDev(ftrKokoroDev,  kokoro);
+    setDev(ftrOllamaDev,  ollama);
+  } catch { /* backend offline — ignore */ }
+}
 
 // ── Waveform bars ─────────────────────────────────────────────────────────────
 const BAR_COUNT = 40;
@@ -122,13 +142,12 @@ async function sendToOllama(userText) {
   setState('thinking');
 
   try {
-    const res = await fetch(`${OLLAMA_BASE}/api/chat`, {
+    const res = await fetch(`${BACKEND_BASE}/chat/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: MODEL,
         messages: conversationHistory,
-        stream: true,
       }),
     });
     if (!res.ok) throw new Error(`Ollama ${res.status}`);
@@ -282,7 +301,10 @@ async function handleSend() {
   textInput.value = '';
   appendMessage('user', text);
   const response = await sendToOllama(text);
-  if (response) await speak(response);
+  if (response) {
+    await speak(response);
+    fetchSystemStatus();
+  }
 }
 
 sendBtn.addEventListener('click', handleSend);
@@ -336,7 +358,10 @@ async function startRecording() {
         if (!transcript) { setState('idle'); return; }
         appendMessage('user', transcript);
         const response = await sendToOllama(transcript);
-        if (response) await speak(response);
+        if (response) {
+          await speak(response);
+          fetchSystemStatus();
+        }
       } catch (err) {
         appendMessage('assistant', `[STT error: ${err.message}]`);
         setState('error');

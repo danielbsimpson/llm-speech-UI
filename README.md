@@ -120,12 +120,16 @@ source .venv/bin/activate  # Windows: .venv\Scripts\activate
 # Install dependencies
 pip install -r requirements.txt
 
+# Download Kokoro model files (~330 MB)
+python scripts/download_models.py
+
 # Copy and configure environment variables
 cp .env.example .env
 # Edit .env with your model name, ports, etc.
 
-# Start the backend
-uvicorn backend.main:app --reload --port 8000
+# Start the backend (must run from backend/ directory)
+cd backend
+uvicorn main:app --reload --port 8000
 
 # Open the frontend
 open frontend/index.html  # or serve it with live-server
@@ -185,8 +189,10 @@ To use Whisper, set `STT_ENGINE=whisper` in `.env` and ensure the FastAPI backen
 |---|---|---|
 | `/chat` | POST | Send a message, stream Ollama response |
 | `/transcribe` | POST | Upload audio blob, returns transcript |
-| `/synthesize` | POST | Send text, returns audio file |
-| `/health` | GET | Check backend + Ollama status |
+| `/synthesize` | POST | Send text, returns WAV audio |
+| `/synthesize/voices` | GET | List available Kokoro voices |
+| `/health` | GET | Check backend status |
+| `/system-status` | GET | Per-model device report (GPU/CPU/IDLE/OFFLINE) |
 
 ### Example: stream a chat response
 
@@ -223,12 +229,16 @@ See [TODO.md](./TODO.md) for the full phased build checklist.
 
 High-level milestones:
 - [x] Project scaffolding and documentation
-- [ ] Ollama integration with streaming
-- [ ] Browser STT + TTS (Phase 1 complete)
-- [ ] Whisper + Kokoro local pipeline (Phase 2)
+- [x] Ollama integration with streaming responses
+- [x] Push-to-talk voice input (MediaRecorder → Whisper STT)
+- [x] Kokoro TTS with 16 curated voices and mode toggle
+- [x] S.T.A.R.L.I.N.G. HUD — waveform, ring animation, status indicators
+- [x] Per-model GPU/CPU device reporting in footer (`/system-status`)
+- [ ] Sentence-chunked TTS to reduce audio lag
+- [ ] Fix GPU dispatch for Whisper (CUDA 12 libs) and Kokoro (onnxruntime-gpu)
 - [ ] Tool use / function calling
 - [ ] Electron desktop app packaging
-- [ ] Local RAG over a documents folder
+- [ ] Local RAG / GraphRAG over a documents folder
 
 ---
 
@@ -237,8 +247,8 @@ High-level milestones:
 Pull requests welcome. Please open an issue first to discuss major changes. Keep PRs focused — one feature or fix per PR.
 
 ```bash
-# Run the backend in dev mode
-uvicorn backend.main:app --reload
+# Run the backend in dev mode (must run from backend/ directory)
+cd backend && uvicorn main:app --reload --port 8000
 
 # Lint Python
 pip install ruff && ruff check backend/

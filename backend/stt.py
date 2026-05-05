@@ -1,8 +1,27 @@
 """backend/stt.py — Local Speech-to-Text via faster-whisper."""
 
 import os
+import sys
 import tempfile
 import logging
+
+# On Windows, ctranslate2 only registers its own DLL dir, so CUDA runtime DLLs
+# (cublas64_12.dll, cudart64_12.dll) bundled by nvidia pip packages won't be
+# found automatically.  Register those directories before ctranslate2 is loaded.
+if sys.platform == "win32":
+    import site as _site
+    _NVIDIA_SUBDIRS = ("nvidia/cublas/bin", "nvidia/cuda_runtime/bin",
+                       "nvidia/cufft/bin", "nvidia/cudnn/bin",
+                       "nvidia/nvjitlink/bin", "nvidia/cuda_nvcc/bin")
+    for _sp in _site.getsitepackages():
+        for _sub in _NVIDIA_SUBDIRS:
+            _dll_dir = os.path.join(_sp, _sub)
+            if os.path.isdir(_dll_dir):
+                try:
+                    os.add_dll_directory(_dll_dir)
+                except OSError:
+                    pass
+
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from faster_whisper import WhisperModel
 
