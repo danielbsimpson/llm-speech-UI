@@ -387,3 +387,378 @@ Both Ollama (port 11434) and llama-server (port 8080) can run simultaneously. Ke
 | Multiple models | Ollama handles transparently | llama-server router mode handles transparently |
 
 ---
+
+## IDEA-003 — Contextual Image Display (RAG)
+
+**Status**: Ready to implement  
+**Effort**: Medium (new backend router + frontend panel + prompt engineering)  
+**Impact**: When STARLING talks about a named subject, a relevant image appears to the left of the chat box while it speaks — making responses more informative and visually engaging
+
+### Problem
+
+STARLING is purely audio/text. When a user asks "Tell me about Apollo 13" or "Who is Richard Feynman?", there is no visual component — the user only hears and reads a response. A curated local image library could be surfaced automatically to accompany relevant answers.
+
+### Solution
+
+Three components working together:
+
+1. **Trigger tag** — the system prompt instructs STARLING to prepend `[IMAGE:key]` to responses about subjects that have an image in the manifest. The frontend strips the tag before displaying text.
+2. **Local manifest** — `assets/images/manifest.json` is the single source of truth for which images exist. The backend exposes it via `/rag/manifest` and resolves keys to files via `/rag/image/{key}`.
+3. **Image panel** — a new UI region to the left of the chat box (flex row) displays the image with a caption, fades in on trigger, and clears on conversation reset.
+
+```
+user asks about X
+  → LLM prepends [IMAGE:apollo_13] to response
+  → app.js strips tag, calls triggerImage("apollo_13")
+  → GET /rag/image/apollo_13 → streams file from assets/images/
+  → .image-panel fades in with image + caption
+  → STARLING narrates while image is displayed
+```
+
+---
+
+### Pre-requisites
+
+- Populate `assets/images/` with your curated image library (JPG/PNG/WebP)
+- The manifest key vocabulary should be injected into the system prompt at startup — load `GET /rag/manifest` in `app.js` init and append the key list to `SYSTEM_PROMPT` before the first message
+
+---
+
+### Implementation Plan
+
+#### Step 1 — Create the image manifest
+
+Create `assets/images/manifest.json`:
+
+```json
+[
+  { "key": "apollo_13",       "label": "Apollo 13",        "file": "apollo_13.jpg",       "tags": ["nasa", "space", "mission"] },
+  { "key": "richard_feynman", "label": "Richard Feynman",  "file": "richard_feynman.jpg", "tags": ["physics", "person"] },
+  { "key": "turing_machine",  "label": "Turing Machine",   "file": "turing_machine.png",  "tags": ["computer science", "alan turing"] }
+]
+```
+
+Schema: each entry must have `key` (lowercase_underscore, unique), `label` (display name), `file` (filename relative to `assets/images/`), `tags` (optional, for future filtering).
+
+---
+
+#### Step 2 — Create `backend/rag.py`
+
+New FastAPI router with two endpoints:
+
+```python
+"""backend/rag.py — Local image RAG router."""
+
+import json
+import mimetypes
+import os
+from pathlib import Path
+
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
+
+router = APIRouter(prefix="/rag", tags=["rag"])
+
+ASSETS_DIR = Path(__file__).parent.parent / "assets" / "images"
+MANIFEST_PATH = ASSETS_DIR / "manifest.json"
+
+
+def _load_manifest() -> list[dict]:
+    if not MANIFEST_PATH.exists():
+        return []
+    with open(MANIFEST_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+
+@router.get("/manifest")
+def get_manifest():
+    """Return the full image manifest."""
+    return _load_manifest()
+
+
+@router.get("/image/{key}")
+def get_image(key: str):
+    """Resolve a manifest key to an image file and stream it."""
+    manifest = _load_manifest()
+    entry = next((e for e in manifest if e["key"] == key), None)
+    if entry is None:
+        raise HTTPException(status_code=404, detail=f"No image for key '{key}'")
+    image_path = ASSETS_DIR / entry["file"]
+    if not image_path.exists():
+        raise HTTPException(status_code=404, detail=f"Image file not found: {entry['file']}")
+    # Prevent path traversal — ensure resolved path stays within ASSETS_DIR
+    if not image_path.resolve().is_relative_to(ASSETS_DIR.resolve()):
+        raise HTTPException(status_code=400, detail="Invalid path")
+    media_type = mimetypes.guess_type(str(image_path))[0] or "application/octet-stream"
+    return FileResponse(str(image_path), media_type=media_type)
+```
+
+---
+
+#### Step 3 — Register the router in `backend/main.py`
+
+```python
+# Add alongside existing router imports:
+from rag import router as rag_router
+
+# Add alongside existing include_router calls:
+app.include_router(rag_router)
+```
+
+---
+
+#### Step 4 — Add `.image-panel` to `frontend/index.html`
+
+Wrap the existing `.chat-panel` and a new `.image-panel` in a shared flex row container, inserted between the ring section and the controls:
+
+```html
+<!-- Replace the standalone <div class="chat-panel"> with this block: -->
+<div class="content-row">
+
+  <!-- Image panel — hidden until a trigger fires -->
+  <div class="image-panel" id="image-panel">
+    <img class="image-display" id="image-display" alt="" />
+    <div class="image-caption" id="image-caption"></div>
+  </div>
+
+  <!-- Chat -->
+  <div class="chat-panel">
+    <div class="chat-inner" id="chat-inner"></div>
+  </div>
+
+</div>
+```
+
+---
+
+#### Step 5 — Add image panel styles to `frontend/style.css`
+
+```css
+/* ── Content row (image panel + chat side-by-side) ───────────────────────── */
+.content-row {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  gap: 16px;
+  min-height: 0;          /* allow children to shrink inside flex column */
+  overflow: hidden;
+}
+
+/* ── Image panel ─────────────────────────────────────────────────────────── */
+.image-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: width 0.4s ease, opacity 0.4s ease, min-width 0.4s ease;
+  flex-shrink: 0;
+}
+
+.image-panel.visible {
+  width: 260px;
+  min-width: 260px;
+  opacity: 1;
+}
+
+.image-display {
+  width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  border: 1px solid rgba(200,200,200,0.1);
+  border-radius: 4px;
+  background: rgba(255,255,255,0.02);
+}
+
+.image-caption {
+  margin-top: 8px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.68rem;
+  color: rgba(200,200,200,0.5);
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+```
+
+Remove the standalone `flex: 1` from `.chat-panel` if it was set there (the `content-row` flex layout now controls sizing) and ensure `.chat-panel` keeps `flex: 1; min-width: 0` so it fills remaining space:
+
+```css
+.chat-panel {
+  flex: 1;
+  min-width: 0;
+  /* all other existing properties unchanged */
+}
+```
+
+---
+
+#### Step 6 — Add `triggerImage` / `clearImage` and manifest loading to `frontend/app.js`
+
+**6a — Load the manifest at startup and inject keys into system prompt:**
+
+```js
+// Replace the static SYSTEM_PROMPT declaration with a two-phase init:
+let SYSTEM_PROMPT =
+  'You are S.T.A.R.L.I.N.G. (Speech‑Triggered Autonomous Reasoning & Local Intelligence Node Generator), ' +
+  'a highly capable local AI assistant. Be concise, precise, and direct. Avoid unnecessary pleasantries.';
+
+async function loadManifestAndPrimePrompt() {
+  try {
+    const res = await fetch(`${BACKEND_BASE}/rag/manifest`);
+    if (!res.ok) return;
+    const manifest = await res.json();
+    if (!manifest.length) return;
+    const keyList = manifest.map(e => `  • ${e.key} — ${e.label}`).join('\n');
+    SYSTEM_PROMPT +=
+      '\n\nYou have access to a local image library. If your response is primarily about one of the ' +
+      'following subjects, prepend your entire response with [IMAGE:key] on its own line (no other text ' +
+      'before it), where key is taken exactly from this list. Only use keys from this list — never invent one.\n' +
+      keyList;
+    // Update the system message already in conversationHistory
+    conversationHistory[0].content = SYSTEM_PROMPT;
+  } catch { /* manifest unavailable — proceed without image support */ }
+}
+```
+
+Call `loadManifestAndPrimePrompt()` in the init block at the bottom of `app.js` alongside `loadVoices()`.
+
+**6b — Add DOM refs for the image panel:**
+
+```js
+const imagePanel   = document.getElementById('image-panel');
+const imageDisplay = document.getElementById('image-display');
+const imageCaption = document.getElementById('image-caption');
+```
+
+**6c — Add `triggerImage` and `clearImage` helpers:**
+
+```js
+async function triggerImage(key) {
+  try {
+    // Validate key exists by fetching the manifest entry (lightweight)
+    const manifestRes = await fetch(`${BACKEND_BASE}/rag/manifest`);
+    if (!manifestRes.ok) return;
+    const manifest = await manifestRes.json();
+    const entry = manifest.find(e => e.key === key);
+    if (!entry) return;                           // unknown key — silently ignore
+
+    imageDisplay.src     = `${BACKEND_BASE}/rag/image/${encodeURIComponent(key)}`;
+    imageCaption.textContent = entry.label.toUpperCase();
+    imagePanel.classList.add('visible');
+  } catch { /* ignore — image display is non-critical */ }
+}
+
+function clearImage() {
+  imagePanel.classList.remove('visible');
+  // Delay src clear until after the CSS transition finishes
+  setTimeout(() => {
+    imageDisplay.src     = '';
+    imageCaption.textContent = '';
+  }, 450);
+}
+```
+
+**6d — Parse `[IMAGE:key]` tag in the token loop inside `sendToOllama()`:**
+
+The tag will appear as the first token(s) of the response. Buffer the opening characters until the closing `]` is confirmed, then extract and strip:
+
+```js
+let imageTagBuf = '';     // accumulates prefix until tag is resolved
+let imageTagDone = false; // true once the opening of the response is confirmed
+
+// Inside the token loop, replace the token accumulation block:
+full    += token;
+txt.textContent = full;
+
+if (!imageTagDone) {
+  imageTagBuf += token;
+  // Wait until we have enough content to either confirm or rule out a tag
+  if (imageTagBuf.includes(']') || imageTagBuf.length > 40) {
+    const tagMatch = imageTagBuf.match(/^\[IMAGE:([a-z0-9_]+)\]\n?/);
+    if (tagMatch) {
+      const key = tagMatch[1];
+      // Strip the tag from displayed text
+      full = full.replace(tagMatch[0], '');
+      txt.textContent = full;
+      triggerImage(key);   // fire-and-forget — non-blocking
+    }
+    imageTagDone = true;
+  }
+}
+```
+
+**6e — Wire `clearImage()` into the clear button handler:**
+
+```js
+clearBtn.addEventListener('click', () => {
+  conversationHistory = [{ role: 'system', content: SYSTEM_PROMPT }];
+  chatInner.innerHTML = '';
+  clearImage();
+  setState('idle');
+});
+```
+
+---
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `assets/images/manifest.json` | Create — image manifest schema |
+| `backend/rag.py` | Create — `/rag/manifest` and `/rag/image/{key}` endpoints |
+| `backend/main.py` | Add `from rag import router as rag_router` + `app.include_router(rag_router)` |
+| `frontend/index.html` | Wrap chat panel in `.content-row`; add `.image-panel` sibling |
+| `frontend/style.css` | Add `.content-row`, `.image-panel`, `.image-display`, `.image-caption` styles |
+| `frontend/app.js` | Manifest load + prompt injection; `triggerImage` / `clearImage`; tag parser in token loop; clear-btn wiring |
+| `backend/stt.py` | **None** |
+| `backend/tts.py` | **None** |
+
+---
+
+### Verification Checklist
+
+1. Add 2–3 test images to `assets/images/` and populate `manifest.json`
+2. Ask "Tell me about [subject]" — confirm `[IMAGE:key]` tag is stripped from displayed text, image panel slides in, caption appears
+3. Ask about a topic with no matching key — confirm panel stays hidden and no console errors
+4. Ask a follow-up on a different subject — confirm image updates to the new one
+5. Press the clear button — confirm image panel fades out
+6. Hit `GET /rag/image/nonexistent_key` directly — confirm 404 response with no server crash
+7. Remove a file from `assets/images/` while keeping its manifest entry — confirm 404 returned gracefully
+
+---
+
+### Design Decisions to Confirm Before Implementing
+
+| Decision | Options | Recommendation |
+|---|---|---|
+| Panel layout | Side-by-side (left) vs. full-width strip above chat | Side-by-side — matches user description; better on widescreen |
+| Image panel width | Fixed (260 px) vs. percentage (25%) | Fixed — predictable at all viewport widths |
+| Key injection | Static in prompt vs. dynamic load at startup | Dynamic (`loadManifestAndPrimePrompt`) — manifest stays as single source of truth |
+| Auto-clear on new message | Yes vs. keep until replaced | Keep until replaced — less distracting; new query will overwrite naturally |
+| Multi-image per response | First tag only vs. gallery | First tag only for v1 |
+
+---
+
+### Scope Boundaries
+
+- Local curated images only — no web search, no scraping
+- No image generation (Stable Diffusion etc.)
+- No video or GIF support in v1
+- "RAG" = key-lookup against a local JSON manifest, not vector embeddings — intentionally lightweight
+
+---
+
+### Expected Result
+
+| Scenario | Before | After |
+|---|---|---|
+| "Tell me about Apollo 13" | Text + audio only | Image appears left of chat; STARLING narrates |
+| Topic with no image | Text + audio | No change — panel stays hidden |
+| Clear conversation | Chat wipes | Chat wipes + image panel fades out |
+| Unknown key hallucinated by LLM | N/A | 404 swallowed silently; no panel shown |
+
+---
