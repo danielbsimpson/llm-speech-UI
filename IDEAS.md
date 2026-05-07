@@ -390,9 +390,194 @@ Both Ollama (port 11434) and llama-server (port 8080) can run simultaneously. Ke
 
 ## IDEA-003 — Contextual Image Display (RAG)
 
-**Status**: Ready to implement  
-**Effort**: Medium (new backend router + frontend panel + prompt engineering)  
-**Impact**: When STARLING talks about a named subject, a relevant image appears to the left of the chat box while it speaks — making responses more informative and visually engaging
+**Status**: Ready to implement (Phase 0 → Phase 1 sequence — see below)  
+**Effort**: Phase 0: Small (frontend-only) · Phase 1: Medium (backend + prompt engineering)  
+**Impact**: Phase 0 establishes voice-triggered layout foundation with no backend dependency. Phase 1 populates it with real images from a local manifest.
+
+---
+
+### Phase 0 — Voice-Triggered Dossier Shell
+
+**Status**: Implement first — required foundation for Phase 1 and IDEA-004  
+**Effort**: Small (frontend-only, no backend changes)  
+**Impact**: When the user says a dossier trigger phrase, the chat window dims and a reserved placeholder region appears — establishing the layout shell that Phase 1 will fill with images and IDEA-004 will expand into full presentation mode. No data is fetched; the LLM is not involved in the trigger decision.
+
+#### What this phase does
+
+Client-side string matching is applied to the STT transcript immediately after transcription, before `sendToOllama()` is called. If a known trigger phrase is detected the UI shifts into `.dossier-mode` and the transcript is swallowed — no LLM round-trip occurs. An exit phrase (or a button, added in IDEA-004) reverts the layout.
+
+```
+user speaks "show me the dossier"
+  → STT transcribes
+  → _matchesPhraseList() intercepts before Ollama call
+  → enterDossierMode() — .starling gains .dossier-mode
+  → .dossier-shell slides in (top-right placeholder)
+  → .chat-panel dims
+  → no Ollama call, no audio response
+  → (Phase 1 will populate .dossier-shell with an image here)
+```
+
+#### Trigger phrase lists
+
+Matching is case-insensitive and uses `String.includes` — the phrase just needs to appear anywhere in the transcript.
+
+```js
+const DOSSIER_TRIGGERS = [
+  'show me the dossier',
+  'can i see the dossier',
+  'what does the dossier look like',
+  'open the dossier',
+  'pull up the dossier',
+  'bring up the dossier',
+  'display the dossier',
+];
+
+const DOSSIER_EXIT_PHRASES = [
+  'go back',
+  'close the dossier',
+  'close dossier',
+  'exit dossier',
+  'back to chat',
+  'resume chat'
+];
+```
+
+Exit phrases are checked **before** triggers so `"close the dossier"` never accidentally matches a trigger.
+
+#### HTML changes (`frontend/index.html`)
+
+Add a `.dossier-shell` sibling inside the flex row that IDEA-004 Step 1 will fully restructure. For Phase 0, it is a styled placeholder:
+
+```html
+<!-- Add immediately before the existing .chat-panel -->
+<div class="dossier-shell" id="dossier-shell">
+  <div class="dossier-placeholder">
+    <span class="dossier-placeholder-label">DOSSIER</span>
+  </div>
+</div>
+```
+
+Phase 1 (below) replaces the inner `.dossier-placeholder` content with an `<img>` and caption. IDEA-004 Step 1 absorbs this element into the `.body-row` restructure.
+
+#### CSS changes (`frontend/style.css`)
+
+```css
+/* ── Dossier shell ───────────────────────────────────────────────────────── */
+.dossier-shell {
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  flex-shrink: 0;
+  transition: width 0.5s ease, opacity 0.5s ease;
+}
+
+.starling.dossier-mode .dossier-shell {
+  width: 280px;
+  min-width: 280px;
+  opacity: 1;
+}
+
+.dossier-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  border: 1px dashed rgba(200,200,200,0.12);
+  border-radius: 4px;
+  margin: 16px 16px 0 0;
+}
+
+.dossier-placeholder-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.25em;
+  color: rgba(200,200,200,0.2);
+  text-transform: uppercase;
+}
+
+/* Chat dims (not fully hidden) in Phase 0 — full collapse comes in IDEA-004 */
+.starling.dossier-mode .chat-panel {
+  opacity: 0.3;
+  transition: opacity 0.4s ease;
+}
+```
+
+#### JS changes (`frontend/app.js`)
+
+**Add constants and helpers (near the top, after `MODEL` declaration):**
+
+```js
+const DOSSIER_TRIGGERS = [
+  'show me the dossier', 'can i see the dossier', 'what does the dossier look like',
+  'open the dossier', 'pull up the dossier', 'bring up the dossier', 'display the dossier',
+];
+
+const DOSSIER_EXIT_PHRASES = [
+  'go back', 'close the dossier', 'close dossier', 'exit dossier', 'back to chat', 'resume chat',
+];
+
+function _matchesPhraseList(text, list) {
+  const lower = text.toLowerCase();
+  return list.some(p => lower.includes(p));
+}
+
+function enterDossierMode() {
+  document.querySelector('.starling').classList.add('dossier-mode');
+}
+
+function exitDossierMode() {
+  document.querySelector('.starling').classList.remove('dossier-mode');
+}
+```
+
+**Hook into the STT result handler, before `sendToOllama(transcript)` is called:**
+
+```js
+// Check exit phrases first, then triggers — order matters
+if (_matchesPhraseList(transcript, DOSSIER_EXIT_PHRASES)) {
+  exitDossierMode();
+  setState('idle');
+  return;   // swallow transcript — no Ollama call
+}
+if (_matchesPhraseList(transcript, DOSSIER_TRIGGERS)) {
+  enterDossierMode();
+  setState('idle');
+  return;   // swallow transcript — pure layout command
+}
+```
+
+**Wire `exitDossierMode()` into the clear button handler:**
+
+```js
+clearBtn.addEventListener('click', () => {
+  conversationHistory = [{ role: 'system', content: SYSTEM_PROMPT }];
+  chatInner.innerHTML = '';
+  exitDossierMode();   // add this line
+  setState('idle');
+});
+```
+
+#### Files changed (Phase 0 only)
+
+| File | Change |
+|---|---|
+| `frontend/index.html` | Add `.dossier-shell` with `.dossier-placeholder` before `.chat-panel` |
+| `frontend/style.css` | Add `.dossier-shell`, `.dossier-placeholder`, `.dossier-placeholder-label`, `.dossier-mode` overrides |
+| `frontend/app.js` | `DOSSIER_TRIGGERS`, `DOSSIER_EXIT_PHRASES`, `_matchesPhraseList`, `enterDossierMode`, `exitDossierMode`; STT result intercept; clear-btn wiring |
+| `backend/*` | **None** |
+
+#### Progression path
+
+| Phase | What's added | Depends on |
+|---|---|---|
+| **0 (this)** | Trigger phrases → `.dossier-mode` CSS class → placeholder shell | Nothing |
+| **1 (Phase 1 below)** | Manifest + backend + real image populates the shell | Phase 0 HTML structure |
+| **2 (IDEA-004)** | Full presentation mode — chat collapses fully, pres-output, ring shift | Phase 0 + Phase 1 |
+
+---
+
+### Phase 1 — Manifest + Image Display (RAG)
 
 ### Problem
 
@@ -765,7 +950,7 @@ clearBtn.addEventListener('click', () => {
 
 ## IDEA-004 — Dynamic Presentation Mode (Context-Driven Layout Shift)
 
-**Status**: Ready to implement (depends on IDEA-003 HTML restructuring)  
+**Status**: Ready to implement (depends on IDEA-003 Phase 0 HTML structure + Phase 1 image infrastructure)  
 **Effort**: Medium (CSS transitions + ~100 lines across 3 files)  
 **Impact**: When STARLING answers a topic with a contextual image, the entire UI reconfigures — image slides in from the left, ring shifts right, chat collapses, and STARLING's output streams below the ring in a clean focused view. A button or voice command reverts to conversation mode.
 
@@ -799,8 +984,9 @@ user says "go back" / clicks EXIT button
 
 ### Pre-requisites
 
-- IDEA-003 must be planned first (or at minimum its HTML restructuring step) — this idea reuses the `.image-panel` and manifest/trigger infrastructure
-- The HTML restructuring in this idea supersedes IDEA-003 Step 4; implement this version instead
+- IDEA-003 Phase 0 must be implemented first — this idea reuses the `.dossier-mode`/`.dossier-shell` structure, `enterDossierMode`/`exitDossierMode` helpers, and the `_matchesPhraseList` intercept
+- IDEA-003 Phase 1 provides the manifest and `[IMAGE:key]` trigger tag that populates the panel
+- The HTML restructuring in this idea supersedes IDEA-003 Phase 0's placeholder element; implement IDEA-004 Step 1 and the placeholder is replaced in one pass
 
 ---
 
