@@ -4,7 +4,7 @@ A running log of planned enhancements, each with enough detail to roll out indep
 
 ---
 
-## IDEA-001 — Sentence-Chunked TTS (Reduce Audio Lag)
+## IDEA-001 — Sentence-Chunked TTS (Reduce Audio Lag) [COMPLETED✅]
 
 **Status**: Ready to implement  
 **Effort**: Small (frontend-only)  
@@ -1153,5 +1153,205 @@ IDEA-003 and IDEA-004 share backend infrastructure (manifest, `/rag/` endpoints)
 | User says "go back" | N/A (no mode) | Instant revert, no LLM call, chat reappears |
 | User clicks EXIT | N/A | Same revert |
 | Clear conversation | Chat wipes | Chat wipes, presentation mode exits, image clears |
+
+---
+
+## IDEA-005 — Mouse Proximity Reactivity (Sphere & Orbs)
+
+**Status**: Ready to implement  
+**Effort**: Small (frontend-only, `app.js` / Three.js `animate()` loop)  
+**Impact**: Makes the visual feel alive and aware — the sphere and orbs respond to the user's physical presence on screen, adding personality without affecting any functional state
+
+### Problem
+
+The sphere and orbs are purely reactive to audio/speech state. The mouse cursor moving across the screen has no effect, making the visual feel passive and disconnected from the user outside of voice interactions.
+
+### Solution
+
+Track the cursor position relative to the sphere's canvas centre. Compute a normalised proximity value (`0` = far away, `1` = touching the sphere edge) and drive two separate reaction tiers from it:
+
+- **Proximity tier** — cursor within a configurable radius of the sphere centre: orbs shift toward light red and the sphere surface displacement increases slightly (looks agitated / flinching)
+- **UI hover tier** — cursor hovering over any interactive button or dropdown: a softer, cooler tint (pale blue-white) and a small speed bump, suggesting alertness without alarm
+
+Both tiers blend smoothly via the existing `orbSpeedMult` lerp pattern and new per-orb colour lerp state, and they yield immediately when a real speech state (listening, speaking) takes over.
+
+---
+
+### Implementation Plan
+
+#### Step 1 — Track mouse position
+
+Add a global mouse position tracker near the top of `app.js`, after the DOM refs block:
+
+```js
+// Normalised mouse position in viewport pixels (updated on every mousemove)
+let _mouseX = -9999;
+let _mouseY = -9999;
+document.addEventListener('mousemove', e => { _mouseX = e.clientX; _mouseY = e.clientY; });
+document.addEventListener('mouseleave', () => { _mouseX = -9999; _mouseY = -9999; });
+```
+
+---
+
+#### Step 2 — Compute proximity each frame
+
+Inside `animate()`, after the existing `orbSpeedMult` lerp block, compute the cursor's distance from the sphere's canvas centre each frame:
+
+```js
+// Get canvas centre in viewport coordinates
+const rect   = renderer.domElement.getBoundingClientRect();
+const cxPx   = rect.left + rect.width  * 0.5;
+const cyPx   = rect.top  + rect.height * 0.5;
+
+// Sphere radius in pixels (use the smaller canvas dimension as a proxy)
+const sphereRadiusPx = Math.min(rect.width, rect.height) * 0.5 * 0.55; // 0.55 ≈ visual sphere edge
+
+const distPx = Math.hypot(_mouseX - cxPx, _mouseY - cyPx);
+
+// proximity: 0 when far away, ramps to 1 when cursor touches sphere edge, >1 if inside
+const PROX_RAMP_START = sphereRadiusPx * 2.5;   // starts reacting at 2.5× sphere radius
+const rawProx = 1 - Math.min(1, Math.max(0, (distPx - sphereRadiusPx) / (PROX_RAMP_START - sphereRadiusPx)));
+// Smooth with a lerp so it doesn't snap
+proximityVal += (rawProx - proximityVal) * 0.06;
+```
+
+Declare `let proximityVal = 0;` alongside the other animation state variables at the top of `initSphere()` or at module scope.
+
+---
+
+#### Step 3 — Detect UI hover
+
+Add a lightweight hover flag driven by `mouseenter`/`mouseleave` on every interactive element:
+
+```js
+let _uiHovered = false;
+const UI_HOVER_ELS = ['mic-btn', 'send-btn', 'clear-btn', 'tts-toggle', 'voice-select', 'text-input'];
+UI_HOVER_ELS.forEach(id => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('mouseenter', () => { _uiHovered = true;  });
+  el.addEventListener('mouseleave', () => { _uiHovered = false; });
+});
+```
+
+---
+
+#### Step 4 — Blend orb colour per-frame
+
+The current orb colour is a single constant selected by speech state. Replace it with a lerped `THREE.Color` that blends toward the reaction tint when `proximityVal` or `_uiHovered` is active, and yields to speech state colours otherwise.
+
+Declare lerp targets and current colour state alongside `orbDefs`:
+
+```js
+const ORB_COLOR_IDLE     = new THREE.Color(0xffffff);  // white
+const ORB_COLOR_LISTEN   = new THREE.Color(0x88bbff);  // blue
+const ORB_COLOR_SPEAK    = new THREE.Color(0xffdd88);  // warm yellow
+const ORB_COLOR_AGITATED = new THREE.Color(0xff8888);  // light red — proximity alarm
+const ORB_COLOR_AWARE    = new THREE.Color(0xaaccff);  // pale blue — UI hover awareness
+
+// Per-orb lerp colour (initialised to idle white)
+const orbCurrentColors = orbDefs.map(() => new THREE.Color(0xffffff));
+```
+
+Inside `animate()`, after computing `proximityVal`, determine the target colour for this frame:
+
+```js
+let orbColorTarget;
+if (isListening)            orbColorTarget = ORB_COLOR_LISTEN;
+else if (isSpeaking)        orbColorTarget = ORB_COLOR_SPEAK;
+else if (proximityVal > 0.05) orbColorTarget = ORB_COLOR_AGITATED.clone().lerp(ORB_COLOR_IDLE, 1 - proximityVal);
+else if (_uiHovered)        orbColorTarget = ORB_COLOR_AWARE;
+else                        orbColorTarget = ORB_COLOR_IDLE;
+```
+
+Then in the orb update loop, replace the direct `.color.set(hex)` call with a lerp:
+
+```js
+// Replace: orb.light.color.set(isListening ? ORB_BLUE : isSpeaking ? ORB_YELLOW : ORB_WHITE);
+orbCurrentColors[i].lerp(orbColorTarget, 0.04);
+orb.light.color.copy(orbCurrentColors[i]);
+orb.mesh.material.color.copy(orbCurrentColors[i]);
+orb.mesh.material.emissive.copy(orbCurrentColors[i]);
+```
+
+---
+
+#### Step 5 — Blend orb speed
+
+The existing `orbSpeedMult` lerp drives speed; extend the target to include proximity:
+
+```js
+// Replace the existing single target line:
+// const targetSpeedMult = isListening ? 1.6 : isSpeaking ? 1.4 : 1.0;
+
+const targetSpeedMult = isListening ? 1.6
+  : isSpeaking        ? 1.4
+  : proximityVal > 0.05 ? 1.0 + proximityVal * 0.8   // up to 1.8× when cursor is on sphere
+  : _uiHovered        ? 1.15                           // mild bump on UI hover
+  : 1.0;
+```
+
+---
+
+#### Step 6 — Modulate sphere displacement amplitude
+
+The existing per-vertex audio displacement uses an `analyserData` amplitude. Add a proximity contribution so the sphere surface looks more turbulent when the cursor is close, even in silence:
+
+```js
+// Existing pattern (approximate):
+const audioPush = analyserData ? ... : 0;
+
+// Add after audioPush computation:
+const proximityPush = proximityVal * 0.08;   // max 0.08 units of extra displacement
+// Combine: vertex offset += audioPush + proximityPush  (apply per vertex in the loop)
+```
+
+---
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `frontend/app.js` | Mouse tracker; `proximityVal` computation in `animate()`; `_uiHovered` flag; per-orb colour lerp; speed mult extension; vertex displacement extension |
+| `frontend/index.html` | **None** |
+| `frontend/style.css` | **None** |
+| `backend/` | **None** |
+
+---
+
+### Design Decisions to Confirm Before Implementing
+
+| Decision | Options | Recommendation |
+|---|---|---|
+| Proximity ramp start distance | 1.5×, 2×, or 2.5× sphere radius | 2.5× — reaction begins well before the cursor reaches the sphere edge |
+| Agitated colour | Deep red vs. light red vs. orange-red | Light red (`#ff8888`) — alarmed but not angry; matches the soft aesthetic |
+| UI hover colour | Pale blue vs. brighter blue vs. white pulse | Pale blue (`#aaccff`) — softer than the listening blue, clearly distinct from idle |
+| Speed ceiling on proximity | 1.6× (match listen) vs. 1.8× vs. 2× | 1.8× — noticeably faster than idle without being frantic |
+| Sphere displacement on proximity | Yes vs. no | Yes — visual turbulence sells the "agitated" metaphor |
+| Speech state takes priority | Always vs. blend | Always — speech state colours and speeds override proximity entirely |
+
+---
+
+### Verification Checklist
+
+1. Move cursor slowly toward the sphere from a distance — confirm orbs fade from white toward light red as distance closes
+2. Move cursor away — confirm smooth fade back to white (not a snap)
+3. Hover over mic button — confirm mild pale-blue tint and slight speed increase
+4. Move off the button — confirm return to idle white
+5. Start speaking (TTS) while cursor is near the sphere — confirm yellow speaking colour takes over immediately
+6. Start listening (mic active) while cursor is near — confirm blue overrides proximity red
+7. Confirm no visible frame-rate impact (no extra `getBoundingClientRect` calls per-vertex — only once per frame at the top of `animate()`)
+
+---
+
+### Expected Result
+
+| Scenario | Before | After |
+|---|---|---|
+| Cursor approaches sphere | No reaction | Orbs fade toward light red, orbits quicken, surface ripples |
+| Cursor retreats | No reaction | Smooth return to white idle |
+| Cursor hovers a button/dropdown | No reaction | Pale blue tint, slight speed increase |
+| TTS speaking fires | Yellow orbs | Yellow overrides any proximity tint |
+| Mic listening fires | Blue orbs | Blue overrides any proximity tint |
 
 ---
