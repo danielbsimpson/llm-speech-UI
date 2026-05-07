@@ -4,6 +4,7 @@ const BACKEND_BASE = 'http://localhost:8000';
 const MODEL        = localStorage.getItem('starling_model') || 'llama3.1:8b';
 const SYSTEM_PROMPT =
   'You are Starling, a voice-driven local AI assistant with a distinct visual presence. ' +
+  'Starling stands for Speech-Triggered Autonomous Reasoning & Local Intelligence Node Generator. ' +
   'Your physical form is an animated 3D sphere rendered in a dark UI — five orbiting light orbs ' +
   'circle you at all times, shifting colour to reflect your internal state: white at rest, ' +
   'blue while listening, green while thinking, and amber-yellow while speaking. ' +
@@ -238,9 +239,9 @@ function initSphere() {
     else                          orbColorTarget = ORB_WHITE;
 
     // Smoothly ramp orbit speed up during active states
-    const targetSpeedMult = isListening          ? 1.6
+    const targetSpeedMult = isListening          ? 1.9
       : isThinking           ? 0.2
-      : isSpeaking           ? 1.4
+      : isSpeaking           ? 2.2
       : proximityVal > 0.01  ? 1.0 + proxCurved * 0.8   // up to 1.8× at sphere edge
       : _uiHovered           ? 1.15
       : 1.0;
