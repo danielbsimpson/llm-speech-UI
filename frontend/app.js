@@ -3,7 +3,10 @@ const OLLAMA_BASE  = 'http://localhost:11434';
 const BACKEND_BASE = 'http://localhost:8000';
 const MODEL        = localStorage.getItem('starling_model') || 'llama3.1:8b';
 const SYSTEM_PROMPT =
-  'You are S.T.A.R.L.I.N.G. (Speech‑Triggered Autonomous Reasoning & Local Intelligence Node Generator), a highly capable local AI assistant. Be concise, precise, and direct. Avoid unnecessary pleasantries.';
+  'You are Starling, a highly capable local AI assistant. ' +
+  'Be concise, precise, and direct. Avoid unnecessary pleasantries. ' +
+  'Respond in plain prose only — never use markdown, asterisks, underscores, bullet points, numbered lists, backticks, or headers. ' +
+  'Write in complete natural sentences. Refer to yourself as Starling.';
 
 // ── Conversation state ────────────────────────────────────────────────────────
 let conversationHistory = [{ role: 'system', content: SYSTEM_PROMPT }];
@@ -318,10 +321,11 @@ async function sendToOllama(userText) {
     let sentBuf = '';              // accumulates tokens until a sentence boundary
     let anySentenceEnqueued = false;
 
-    // Regex: sentence boundary = .?! followed by whitespace or end-of-string.
+    // Regex: sentence boundary = .?! optionally followed by closing quotes/brackets,
+    // then whitespace or end-of-string.
     // Negative lookbehind skips decimal numbers (3.14) and ellipsis (...).
-    const sentenceRe = /[^.?!]*(?<![0-9])[.?!](?!\.)(\s|$)/g;
-
+    const sentenceRe = /[^.?!]*(?<![0-9])[.?!](?!\.)["')\]]*(\s|$)/g;    // Also split on lines ending with ':' (e.g. "was marked by:") so intros get their own audio clip
+    const colonRe = /[^\n]+:\s*\n/g;
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -332,16 +336,41 @@ async function sendToOllama(userText) {
           if (!token) continue;
           full    += token;
           sentBuf += token;
-          txt.textContent      = full;
-          chatInner.scrollTop  = chatInner.scrollHeight;
 
-          // Flush complete sentences from the buffer
+          // TTS off — display immediately; TTS on — text is revealed sentence-by-sentence on audio start
+          if (ttsMode === 'off') {
+            txt.textContent     = full;
+            chatInner.scrollTop = chatInner.scrollHeight;
+          }
+
+          // Flush complete sentences (and colon-terminated intro lines) from the buffer
+          const flushSentence = (sentence) => {
+            const clean = _sanitiseForTTS(sentence);
+            if (!clean) return;
+            const snapshot = full;
+            const _txt = txt; const _ci = chatInner;
+            enqueueSpeak(clean, (audio) => {
+              const dur = audio && Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : null;
+              if (dur) { _streamTextInto(_txt, _ci, snapshot, dur); }
+              else     { _txt.textContent = snapshot; _ci.scrollTop = _ci.scrollHeight; }
+            });
+            anySentenceEnqueued = true;
+          };
+
+          // First drain any colon-intro lines
+          colonRe.lastIndex = 0;
+          let colonMatch; let colonEnd = 0;
+          while ((colonMatch = colonRe.exec(sentBuf)) !== null) {
+            flushSentence(colonMatch[0].trim());
+            colonEnd = colonRe.lastIndex;
+          }
+          if (colonEnd) sentBuf = sentBuf.slice(colonEnd);
+
           sentenceRe.lastIndex = 0;
           let match;
           let lastEnd = 0;
           while ((match = sentenceRe.exec(sentBuf)) !== null) {
-            const sentence = match[0].trim();
-            if (sentence) { enqueueSpeak(sentence); anySentenceEnqueued = true; }
+            flushSentence(match[0].trim());
             lastEnd = sentenceRe.lastIndex;
           }
           sentBuf = sentBuf.slice(lastEnd);
@@ -350,7 +379,19 @@ async function sendToOllama(userText) {
     }
 
     // Flush any remaining text that didn't end with punctuation
-    if (sentBuf.trim()) { enqueueSpeak(sentBuf.trim()); anySentenceEnqueued = true; }
+    if (sentBuf.trim()) {
+      const clean = _sanitiseForTTS(sentBuf.trim());
+      if (clean) {
+        const snapshot = full;
+        const _txt = txt; const _ci = chatInner;
+        enqueueSpeak(clean, (audio) => {
+          const dur = audio && Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : null;
+          if (dur) { _streamTextInto(_txt, _ci, snapshot, dur); }
+          else     { _txt.textContent = snapshot; _ci.scrollTop = _ci.scrollHeight; }
+        });
+        anySentenceEnqueued = true;
+      }
+    }
 
     wrap.classList.remove('streaming');
     conversationHistory.push({ role: 'assistant', content: full });
@@ -428,10 +469,26 @@ async function loadVoices() {
   } catch { /* backend not running — leave static fallback option */ }
 }
 
+// Strip markdown and other symbols that TTS engines vocalise badly
+function _sanitiseForTTS(text) {
+  return text
+    .replace(/S\.T\.A\.R\.L\.I\.N\.G\.?/gi, 'Starling') // acronym → name
+    .replace(/\*\*([^*]*)\*\*/g, '$1')   // **bold**
+    .replace(/\*([^*]*)\*/g, '$1')        // *italic*
+    .replace(/__([^_]*)__/g, '$1')        // __bold__
+    .replace(/_([^_]*)_/g, '$1')          // _italic_
+    .replace(/`([^`]*)`/g, '$1')          // `code`
+    .replace(/^#{1,6}\s*/gm, '')          // # headings
+    .replace(/\*/g, '')                   // stray asterisks
+    .replace(/\s{2,}/g, ' ')              // collapse whitespace
+    .trim();
+}
+
 // Active audio element (so we can cancel mid-speech)
-let _activeAudio    = null;
-let _playbackChain  = Promise.resolve();  // serial playback queue
-let _audioGeneration = 0;                 // increment on clear to discard stale callbacks
+let _activeAudio     = null;
+let _playbackChain   = Promise.resolve();  // serial playback queue
+let _audioGeneration = 0;                  // increment on clear to discard stale callbacks
+let _textStreamTimer = null;               // setInterval handle for character-by-character text reveal
 
 // Eagerly fetch the TTS WAV blob — starts immediately, not when playback is ready
 async function _fetchTTSBlob(text) {
@@ -446,29 +503,56 @@ async function _fetchTTSBlob(text) {
   } catch { return null; }
 }
 
+// Stream text character by character into `el` from its current value to targetText over `duration` seconds
+function _streamTextInto(el, scrollEl, targetText, duration) {
+  if (_textStreamTimer !== null) { clearInterval(_textStreamTimer); _textStreamTimer = null; }
+  const base  = el.textContent;
+  const toAdd = targetText.slice(base.length);
+  if (!toAdd.length) return;
+  const msPerChar = Math.max(16, (duration * 1000) / toAdd.length);
+  let i = 0;
+  _textStreamTimer = setInterval(() => {
+    i++;
+    el.textContent      = base + toAdd.slice(0, i);
+    scrollEl.scrollTop  = scrollEl.scrollHeight;
+    if (i >= toAdd.length) { clearInterval(_textStreamTimer); _textStreamTimer = null; }
+  }, msPerChar);
+}
+
 // Play a pre-fetched blob promise; resolves when playback finishes
-async function _playBlob(blobPromise) {
+// onAudioStart (optional): called with the Audio element once metadata is loaded (duration is valid)
+async function _playBlob(blobPromise, onAudioStart) {
   setState('speaking');
-  return new Promise(async (resolve) => {
-    const blob = await blobPromise;
-    if (!blob) { setState('idle'); resolve(); return; }
+  const blob = await blobPromise.catch(() => null);
+  if (!blob) { setState('idle'); return; }
+  return new Promise(resolve => {
     const url   = URL.createObjectURL(blob);
     const audio = new Audio(url);
     _activeAudio = audio;
-    const done = () => { URL.revokeObjectURL(url); _activeAudio = null; setState('idle'); resolve(); };
+    const done  = () => { URL.revokeObjectURL(url); _activeAudio = null; setState('idle'); resolve(); };
     audio.onended = done;
     audio.onerror = done;
-    audio.play().catch(done);
+    // Wait for metadata so audio.duration is a valid finite number before starting text stream
+    audio.onloadedmetadata = () => {
+      try { if (onAudioStart) onAudioStart(audio); } catch(e) {}
+      audio.play().catch(done);
+    };
+    audio.load();
   });
 }
 
 // Enqueue a sentence — synthesis starts NOW in parallel, playback waits its turn
-function enqueueSpeak(text) {
-  if (ttsMode === 'off') return;
+// onStart (optional): called just before this sentence's audio begins playing
+function enqueueSpeak(text, onStart) {
+  if (ttsMode === 'off') {
+    if (onStart) onStart();  // TTS off — reveal text immediately
+    return;
+  }
   if (ttsMode === 'browser') {
     const gen = _audioGeneration;
     _playbackChain = _playbackChain.then(() => {
       if (_audioGeneration !== gen) return;
+      if (onStart) onStart();
       return new Promise(resolve => { _speakBrowser(text); resolve(); });
     });
     return;
@@ -478,7 +562,7 @@ function enqueueSpeak(text) {
   const gen = _audioGeneration;
   _playbackChain = _playbackChain.then(() => {
     if (_audioGeneration !== gen) return;   // queue was cleared — discard
-    return _playBlob(blobPromise);
+    return _playBlob(blobPromise, onStart); // onStart(audio) called once playback begins
   });
 }
 
@@ -487,6 +571,7 @@ function clearAudioQueue() {
   _audioGeneration++;                       // invalidates all enqueued callbacks
   _playbackChain = Promise.resolve();
   if (_activeAudio) { _activeAudio.pause(); _activeAudio = null; }
+  if (_textStreamTimer !== null) { clearInterval(_textStreamTimer); _textStreamTimer = null; }
   if (window.speechSynthesis) window.speechSynthesis.cancel();
 }
 
