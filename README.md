@@ -6,29 +6,30 @@ A voice-driven, S.T.A.R.L.I.N.G. (Speech‑Triggered Autonomous Reasoning & Loca
 Microphone → Speech-to-Text → Ollama (LLM on GPU) → Text-to-Speech → Browser UI
 ```
 
-![S.T.A.R.L.I.N.G. UI](assets/images/REMI_UI_example2.png)
+![S.T.A.R.L.I.N.G. UI](assets/images/Starling_UI_example.png)
 
 ---
 
 ## Features
 
-- 🎙 **Voice input** via browser Web Speech API or local Whisper
+- 🎙 **Voice input** via browser MediaRecorder API → local faster-whisper (Whisper)
 - 🧠 **Local LLM inference** via Ollama (Llama 3, Mistral, Gemma 2, and more)
-- 🔊 **Text-to-speech** via browser SpeechSynthesis or Kokoro TTS
-- 📡 **Streaming responses** — tokens render as they arrive
+- 🔊 **Text-to-speech** via Kokoro TTS (local, GPU-accelerated) or browser SpeechSynthesis
+- 📡 **Sentence-chunked streaming** — each sentence is synthesised and played as it arrives
 - 💬 **Multi-turn conversation** with persistent context
-- 🖥 **S.T.A.R.L.I.N.G. HUD** — dark interface with animated waveform and arc rings
+- 🌑 **Living black sphere** — Three.js scene with 7 orbiting light orbs; reacts to audio input and shifts colour/speed per state (idle / listening / thinking / speaking)
+- ⚡ **Model warm-up on load** — Kokoro and Whisper CUDA sessions are pre-heated at startup; UI shows `INITIALISING…` and GPU badges populate before the user speaks
 - 🔒 **Fully local** — no data leaves your machine
 
 ---
 
 ## Requirements
 
-- **OS:** Linux, macOS, or Windows (WSL2 recommended on Windows)
-- **GPU:** NVIDIA GPU with 6 GB+ VRAM (CUDA 11.8+), or Apple Silicon (Metal)
-- **Python:** 3.10+
+- **OS:** Linux, macOS, or Windows
+- **GPU:** NVIDIA GPU with 6 GB+ VRAM (CUDA 12+), or DirectX 12-capable GPU (DirectML)
+- **Python:** 3.11+
 - **Node.js:** 18+ (only if using the React/Vite frontend)
-- **Browser:** Chrome or Edge (required for Web Speech API)
+- **Browser:** Chrome or Edge (required for MediaRecorder / Web Speech API fallback)
 
 ### Recommended GPU / model pairings
 
@@ -43,10 +44,10 @@ Microphone → Speech-to-Text → Ollama (LLM on GPU) → Text-to-Speech → Bro
 
 | Model | Size | Notes |
 |---|---|---|
-| `llama3.1:8b` | 4.9 GB | **Default** — strong general purpose |
+| `llama3.1:8b` | 4.9 GB | Strong general purpose |
 | `mistral:7b` | 4.4 GB | Fast, good instruction following |
 | `qwen2.5:7b` | 4.7 GB | Strong coding and reasoning |
-| `gemma3:4b` | 3.3 GB | Lightweight, good for low VRAM |
+| `gemma3:4b` | 3.3 GB | **Default** — lightweight, good for low VRAM |
 | `llama3.2:3b` | 2.0 GB | Fastest response times |
 | `phi4-mini` | 2.5 GB | Microsoft, strong reasoning for its size |
 | `nomic-embed-text` | 274 MB | Embedding model (for future RAG) |
@@ -144,20 +145,21 @@ Copy `.env.example` to `.env` and edit as needed:
 ```env
 # Ollama
 OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=llama3
+OLLAMA_MODEL=gemma3:4b
 OLLAMA_TEMPERATURE=0.7
-OLLAMA_SYSTEM_PROMPT="You are S.T.A.R.L.I.N.G. (Speech‑Triggered Autonomous Reasoning & Local Intelligence Node Generator), a highly capable local AI assistant. Be concise, precise, and helpful."
+OLLAMA_SYSTEM_PROMPT=You are S.T.A.R.L.I.N.G. ...
 
-# Speech-to-text
-STT_ENGINE=whisper          # whisper | browser
-WHISPER_MODEL=base          # tiny | base | small | medium | large
-
-# Text-to-speech
-TTS_ENGINE=kokoro           # kokoro | piper | browser
-TTS_VOICE=af_sarah          # Kokoro voice ID
-
-# Backend server
+# Backend
 BACKEND_PORT=8000
+
+# STT — faster-whisper
+WHISPER_MODEL_SIZE=base   # tiny | base | small | medium | large-v3
+WHISPER_DEVICE=cuda       # set to cpu if CUDA unavailable
+
+# TTS — Kokoro ONNX
+ONNX_PROVIDER=DmlExecutionProvider   # DirectML (no CUDA toolkit required)
+# Use CUDAExecutionProvider + onnxruntime-gpu if CUDA 12 + cuDNN 9 are installed
+# Use CPUExecutionProvider if no GPU acceleration is available
 ```
 
 ---
@@ -219,7 +221,7 @@ If using the FastAPI backend, ensure CORS is enabled in `main.py` for your front
 Try a smaller model (`mistral:7b` is fast and capable). Also check that you're not CPU-falling-back — `ollama ps` shows which layers are on GPU vs CPU.
 
 **Audio not playing after TTS**
-Browsers block autoplay. Ensure TTS playback is triggered by a user gesture (e.g. the send button click), not programmatically on page load.
+Browsers enforce an autoplay policy that blocks `audio.play()` until the user has made a gesture (click or keypress) on the page. This is by design — TTS playback is triggered by the user's mic press or send button, which satisfies the policy. The startup greeting is intentionally text-only for this reason.
 
 ---
 
@@ -230,12 +232,13 @@ See [TODO.md](./TODO.md) for the full phased build checklist.
 High-level milestones:
 - [x] Project scaffolding and documentation
 - [x] Ollama integration with streaming responses
-- [x] Push-to-talk voice input (MediaRecorder → Whisper STT)
-- [x] Kokoro TTS with 16 curated voices and mode toggle
-- [x] S.T.A.R.L.I.N.G. HUD — waveform, ring animation, status indicators
+- [x] Push-to-talk voice input (MediaRecorder → Whisper STT on GPU)
+- [x] Kokoro TTS with 16 curated voices, sentence-chunked playback, and mode toggle
+- [x] Living black sphere (Three.js) — 7 orbiting light orbs, audio-driven deformation, 4-state machine
 - [x] Per-model GPU/CPU device reporting in footer (`/system-status`)
-- [ ] Sentence-chunked TTS to reduce audio lag
-- [ ] Fix GPU dispatch for Whisper (CUDA 12 libs) and Kokoro (onnxruntime-gpu)
+- [x] Model warm-up on page load — Kokoro + Whisper pre-heated, GPU badges populated before first mic press
+- [x] GPU dispatch working for both Whisper (CUDA) and Kokoro (DirectML / CUDA)
+- [ ] Sentence-chunked TTS latency further tuning
 - [ ] Tool use / function calling
 - [ ] Electron desktop app packaging
 - [ ] Local RAG / GraphRAG over a documents folder
