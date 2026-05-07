@@ -1,7 +1,7 @@
 // ── Config ────────────────────────────────────────────────────────────────────
 const OLLAMA_BASE  = 'http://localhost:11434';
 const BACKEND_BASE = 'http://localhost:8000';
-const MODEL        = localStorage.getItem('starling_model') || 'llama3.1:8b';
+const MODEL        = localStorage.getItem('starling_model') || 'gemma3:4b';
 const SYSTEM_PROMPT =
   'You are Starling, a voice-driven local AI assistant with a distinct visual presence. ' +
   'Starling stands for Speech-Triggered Autonomous Reasoning & Local Intelligence Node Generator. ' +
