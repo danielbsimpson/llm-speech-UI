@@ -47,8 +47,8 @@ Microphone → Speech-to-Text → Ollama (LLM on GPU) → Text-to-Speech → Bro
 | `llama3.1:8b` | 4.9 GB | Strong general purpose |
 | `mistral:7b` | 4.4 GB | Fast, good instruction following |
 | `qwen2.5:7b` | 4.7 GB | Strong coding and reasoning |
-| `gemma3:4b` | 3.3 GB | **Default** — lightweight, good for low VRAM |
-| `llama3.2:3b` | 2.0 GB | Fastest response times |
+| `gemma3:4b` | 3.3 GB | Lightweight, good for low VRAM |
+| `llama3.2:3b` | 2.0 GB | **Default** — fastest response times |
 | `phi4-mini` | 2.5 GB | Microsoft, strong reasoning for its size |
 | `nomic-embed-text` | 274 MB | Embedding model (for future RAG) |
 
@@ -145,7 +145,7 @@ Copy `.env.example` to `.env` and edit as needed:
 ```env
 # Ollama
 OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=gemma3:4b
+OLLAMA_MODEL=llama3.2:3b
 OLLAMA_TEMPERATURE=0.7
 OLLAMA_SYSTEM_PROMPT=You are S.T.A.R.L.I.N.G. ...
 

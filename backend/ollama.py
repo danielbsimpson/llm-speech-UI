@@ -9,7 +9,7 @@ from pydantic import BaseModel
 router = APIRouter(prefix="/chat", tags=["ollama"])
 
 OLLAMA_BASE = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-DEFAULT_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
+DEFAULT_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
 SYSTEM_PROMPT = os.getenv(
     "OLLAMA_SYSTEM_PROMPT",
     "You are S.T.A.R.L.I.N.G. (Speech‑Triggered Autonomous Reasoning & Local Intelligence Node Generator), a highly capable local AI assistant. Be concise, precise, and direct. Avoid unnecessary pleasantries.",

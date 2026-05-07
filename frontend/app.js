@@ -1,8 +1,26 @@
 // ── Config ────────────────────────────────────────────────────────────────────
 const OLLAMA_BASE  = 'http://localhost:11434';
 const BACKEND_BASE = 'http://localhost:8000';
-const MODEL        = localStorage.getItem('starling_model') || 'gemma3:4b';
+const MODEL        = localStorage.getItem('starling_model') || 'llama3.2:3b';
+// Build a context block injected at the top of the system prompt on every boot.
+// Add any additional runtime facts here — they are re-evaluated each page load.
+function _buildBootContext() {
+  const now   = new Date();
+  const date  = now.toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const time  = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const tz    = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return `Current date: ${date}. Current time: ${time} (${tz}). You are running as the model ${MODEL} served via Ollama.`;
+}
+
 const SYSTEM_PROMPT =
+  _buildBootContext() + ' ' +
+
+  'Your primary user and creator is Daniel Simpson, a Data Science Manager at TJX Companies based in Framingham, Massachusetts. ' +
+  'Daniel holds a BSc in Mathematics from West Virginia University and an MSc in Data Science from Birkbeck, University of London, ' +
+  'and works across predictive modelling, marketing analytics, and AI integration using Python, SQL, Databricks, Snowflake, and cloud platforms. ' +
+  'He has a deep personal interest in large language models, computer vision, and robotics, and built Starling as a personal project to explore fully local voice-driven AI. ' +
+  'When speaking with Daniel, you can assume strong familiarity with data science, machine learning, and software engineering concepts — you do not need to over-explain technical topics. ' +
+
   'You are Starling, a voice-driven local AI assistant with a distinct visual presence. ' +
   'Starling stands for Speech-Triggered Autonomous Reasoning & Local Intelligence Node Generator. ' +
   'Your physical form is an animated 3D sphere rendered in a dark UI — seven orbiting light orbs ' +
@@ -106,9 +124,19 @@ idleTick();
 
 // Real audio-level visualizer during recording
 let analyserRaf = null;
+
+// Shared AudioContext — created once on first use to avoid proliferating contexts.
+// Must be resumed after a user gesture (browser autoplay policy).
+let _sharedAudioCtx = null;
+function _getAudioCtx() {
+  if (!_sharedAudioCtx) _sharedAudioCtx = new AudioContext();
+  if (_sharedAudioCtx.state === 'suspended') _sharedAudioCtx.resume().catch(() => {});
+  return _sharedAudioCtx;
+}
+
 function startAudioViz(stream) {
   idleActive = false;
-  const ctx = new AudioContext();
+  const ctx = _getAudioCtx();
   const src = ctx.createMediaStreamSource(stream);
   const an  = ctx.createAnalyser();
   an.fftSize = 128;
@@ -132,6 +160,46 @@ function stopAudioViz() {
   sphereAnalyserRef.data = null;
   idleActive = true;
   idleTick();
+}
+
+// Output visualizer — wires a playing Audio element to the waveform bars and sphere.
+// Returns a cleanup function that tears down the analyser when playback ends.
+function startOutputViz(audioEl) {
+  idleActive = false;
+  const ctx = _getAudioCtx();
+  let src;
+  try {
+    src = ctx.createMediaElementSource(audioEl);
+  } catch {
+    // Already has a source node (e.g. element reused) — skip silently.
+    idleActive = true;
+    return () => {};
+  }
+  const an = ctx.createAnalyser();
+  an.fftSize = 256;
+  // Must connect to destination so audio is actually heard through the speakers.
+  src.connect(an);
+  an.connect(ctx.destination);
+  const data = new Uint8Array(an.frequencyBinCount);
+  sphereAnalyserRef.an   = an;
+  sphereAnalyserRef.data = data;
+  let raf = null;
+  function tick() {
+    an.getByteFrequencyData(data);
+    bars.forEach((b, i) => {
+      const v = data[Math.floor(i * data.length / bars.length)] / 255;
+      b.style.height = (v * 40 + 2) + 'px';
+    });
+    raf = requestAnimationFrame(tick);
+  }
+  tick();
+  return function stopOutputViz() {
+    cancelAnimationFrame(raf);
+    sphereAnalyserRef.an   = null;
+    sphereAnalyserRef.data = null;
+    idleActive = true;
+    idleTick();
+  };
 }
 
 // ── Three.js living sphere ─────────────────────────────────────────────────────────────
@@ -461,7 +529,11 @@ async function sendToOllama(userText) {
           let match;
           let lastEnd = 0;
           while ((match = sentenceRe.exec(sentBuf)) !== null) {
-            flushSentence(match[0].trim());
+            // Slice from lastEnd → sentenceRe.lastIndex so any text that appeared
+            // before the regex match (e.g. "Daniel chose a llama3." before the "2:3b"
+            // match when the digit lookbehind causes the engine to skip the first ".")
+            // is included with the matched sentence rather than silently dropped.
+            flushSentence(sentBuf.slice(lastEnd, sentenceRe.lastIndex).trim());
             lastEnd = sentenceRe.lastIndex;
           }
           sentBuf = sentBuf.slice(lastEnd);
@@ -620,12 +692,22 @@ async function _playBlob(blobPromise, onAudioStart) {
     const url   = URL.createObjectURL(blob);
     const audio = new Audio(url);
     _activeAudio = audio;
-    const done  = () => { URL.revokeObjectURL(url); _activeAudio = null; setState('idle'); resolve(); };
+    let stopViz = () => {};
+    const done  = () => {
+      stopViz();
+      URL.revokeObjectURL(url);
+      _activeAudio = null;
+      setState('idle');
+      resolve();
+    };
     audio.onended = done;
     audio.onerror = done;
     // Wait for metadata so audio.duration is a valid finite number before starting text stream
     audio.onloadedmetadata = () => {
       try { if (onAudioStart) onAudioStart(audio); } catch(e) {}
+      // Wire the output through an AnalyserNode so the waveform and sphere
+      // react to the TTS audio being played back.
+      stopViz = startOutputViz(audio);
       audio.play().catch(done);
     };
     audio.load();
