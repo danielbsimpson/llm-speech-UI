@@ -11,11 +11,10 @@ A voice-driven, S.T.A.R.L.I.N.G.-style web interface powered by a local LLM via 
 | 1 | TTS (Kokoro) | Speech playback is lagged ~3–4 s behind text appearing in the UI — full response completes before audio begins | ✅ Resolved — all pipelines migrated to GPU; delay reduced from 2–8 s to ~3–4 s. Sentence-chunked TTS (Phase 7) remains as a further improvement |
 | 2 | TTS / STT GPU utilisation | CPU usage spiked during synthesis and transcription; neither pipeline was dispatching to the GPU | ✅ Resolved — Kokoro and Whisper now run on GPU; `onnxruntime-gpu` and CUDA libraries confirmed working |
 | 3 | STT (listening mode) | Recording stops too early — silence detection cuts off the user mid-sentence before they have finished speaking | 🔴 Open |
-| 4 | TTS (Kokoro) | LLM responses containing markdown/punctuation symbols are vocalised literally — e.g. `*` is spoken as "asterisk", `.` as "dot", `#` as "hash" — making speech sound unnatural and robotic | 🔴 Open |
-| 5 | STT / TTS / LLM (cold start) | The first mic press after page load has a noticeably longer end-to-end delay (~6–7 s) compared to subsequent presses (~2–3 s) — models and ONNX sessions are not initialised until the first real request arrives | 🔴 Open |
+| 4 | TTS (Kokoro) | LLM responses containing markdown/punctuation symbols are vocalised literally — e.g. `*` is spoken as "asterisk", `.` as "dot", `#` as "hash" — making speech sound unnatural and robotic | � Partial — system prompt instructs the model to respond in plain prose only (no markdown, asterisks, headers, bullet points); a frontend `_sanitiseForTTS()` pass also strips residual symbols. Edge cases may still occur if the model ignores the instruction. |
+| 5 | STT / TTS / LLM (cold start) | The first mic press after page load has a noticeably longer end-to-end delay (~6–7 s) compared to subsequent presses (~2–3 s) — models and ONNX sessions are not initialised until the first real request arrives | ✅ Resolved — on page load, the greeting text is synthesised via Kokoro (heats ONNX session) and the resulting WAV is posted to Whisper (heats CUDA session); `fetchSystemStatus()` is awaited before the UI transitions to ONLINE so GPU badges are populated before the user speaks |
 
 **Potential fixes to investigate:**
-- **TTS lag**: implement sentence-chunked TTS — split the streamed response on `.`, `?`, `!` boundaries and synthesise + play each sentence as it completes rather than waiting for the full response (see Phase 7)
 - **STT early cutoff** — several approaches ranked by effort:
   - **Extend silence timeout**: increase the silence/inactivity threshold in the MediaRecorder stop logic (e.g. from ~500 ms to 1 500–2 000 ms) — lowest effort, try first
   - **Energy-based VAD in the browser**: use the Web Audio API `AnalyserNode` to compute the RMS of the mic signal in real time; only trigger stop when the energy stays below a threshold for a sustained window (avoids cutting off on short inter-word pauses)
@@ -24,13 +23,6 @@ A voice-driven, S.T.A.R.L.I.N.G.-style web interface powered by a local LLM via 
   - **Streaming chunked STT**: stream audio to the backend in small chunks via WebSocket; transcribe each chunk with Whisper and only finalise when a real pause is detected rather than relying on the frontend to decide when to stop recording
   - **Push-to-talk only mode**: remove automatic stop entirely — user holds spacebar/button for the full utterance; eliminates all VAD false-positives at the cost of requiring deliberate release
   - **Configurable silence timeout in settings panel**: expose the silence threshold (ms) as a slider in the settings panel so users can tune it for their microphone / speaking style without a code change
-- **Cold-start delay (Issue #5)** — approaches ranked by effort:
-  - **Warm-up ping on page load (lowest effort)**: at startup, fire a silent dummy request to `/transcribe` (empty or near-silent audio), `/synthesize` (single space or short string), and `/chat` (one-token prompt like "hi") so all three model sessions are loaded and CUDA kernels are compiled before the user ever presses the mic — zero visible UX change, just background pre-heating
-  - **Silent audio warm-up for Whisper**: generate a short (0.5 s) silent WAV blob in JavaScript using the Web Audio API (`OfflineAudioContext`) and POST it to `/transcribe` immediately after `loadVoices()` resolves on page load — warms the Whisper CUDA session without needing a real microphone press
-  - **Backend `/warmup` endpoint**: add a dedicated `GET /warmup` route in `main.py` that sequentially runs a dummy inference pass through Whisper, Kokoro, and Ollama (e.g. transcribe silence, synthesise a short string, send a one-token chat) — called once from `app.js` `init` after the page has fully rendered; can return a JSON status so the frontend shows a brief `WARMING UP` badge instead of `ONLINE` until ready
-  - **Lazy import → eager import in backend**: `stt.py` and `tts.py` currently instantiate the Whisper model and Kokoro pipeline inside the request handler on first call; move model loading to module-level (at import time) so FastAPI startup triggers them — Uvicorn's startup event (`@app.on_event("startup")`) is a clean hook for this
-  - **FastAPI `startup` event for all models**: register an `async def startup()` handler in `main.py` using `@app.on_event("startup")` (or `lifespan`) that calls the warm-up logic for all three pipelines; models are ready by the time the first browser request arrives, not on-demand
-  - **Show `WARMING UP` state in HUD**: while the warm-up requests are in flight, set the sphere to `thinking` state and show `WARMING UP` in the status label — gives the user a clear signal that the system is initialising and they should wait a moment before speaking
 
 - **Symbol vocalisation (Issue #4)** — approaches ranked by effort:
   - **Frontend text sanitiser (lowest effort)**: before passing the LLM response text to the TTS endpoint, run a `sanitiseForSpeech()` function in `app.js` that strips or rewrites common markdown/punctuation symbols — remove `*`, `**`, `_`, `` ` ``, `#`; replace ` — ` with a pause comma; replace `:` at end of a phrase with nothing; etc. This catches the most common cases with zero backend changes
@@ -39,7 +31,7 @@ A voice-driven, S.T.A.R.L.I.N.G.-style web interface powered by a local LLM via 
   - **SSML-aware TTS**: switch to a TTS engine that accepts SSML input (e.g. XTTS-v2, edge-tts) and map markdown structures to SSML pause/emphasis tags — most natural output but highest effort
   - **Sentence-chunked pipeline synergy**: combining with sentence-chunked TTS (Issue #1 follow-up) means the sanitiser runs per-sentence before synthesis, making it easier to test and tune incrementally
 
-**Monitoring**: The `/system-status` endpoint and footer device badges surface GPU vs CPU state for all three pipelines in real time after each exchange.
+**Monitoring**: The `/system-status` endpoint and footer device badges surface GPU vs CPU state for all three pipelines in real time after each exchange — and are now also polled once at startup after the warm-up sequence completes.
 
 ---
 
@@ -284,6 +276,32 @@ Replace flat vector RAG with [Microsoft GraphRAG](https://github.com/microsoft/g
 - [ ] Show a subtle "memory active" indicator on the ring when graph context was injected into a response
 - [ ] Add a `MEMORY` button to the controls row that opens a simple panel listing: last indexed time, document count, top entities, and a manual "Re-index now" trigger
 - [ ] Display the active search mode (`LOCAL` / `GLOBAL`) in the footer alongside the TTS/STT labels
+
+---
+
+## Closed Topics
+
+Approaches considered for resolved issues — retained for reference in case issues resurface or interact with future work.
+
+### Issue #1 — TTS lag (✅ Resolved)
+**Resolution**: all pipelines migrated to GPU; delay reduced from 2–8 s to ~3–4 s.
+
+**Approaches considered:**
+- **Sentence-chunked TTS** *(chosen path for further improvement)*: split the streamed response on `.`, `?`, `!` boundaries and synthesise + play each sentence as it completes rather than waiting for the full response (see Phase 7)
+
+### Issue #2 — TTS / STT GPU utilisation (✅ Resolved)
+**Resolution**: Kokoro and Whisper now run on GPU; `onnxruntime-gpu` and CUDA libraries confirmed working.
+
+### Issue #5 — Cold-start delay (✅ Resolved)
+**Resolution**: on page load, `warmupModels()` synthesises the greeting via Kokoro (heats the ONNX/CUDA session), posts the resulting WAV to `/transcribe` (heats the Whisper CUDA session), then awaits `fetchSystemStatus()` before transitioning to ONLINE. The UI shows `INITIALISING…` and the sphere enters the `WARMING UP` state until the full sequence completes.
+
+**Approaches considered (ranked by effort at time of investigation):**
+- **Warm-up ping on page load** *(implemented — adapted)*: synthesise the greeting text via `/synthesize` and post the result to `/transcribe`; both sessions are live before the user speaks
+- **Silent audio warm-up for Whisper**: generate a short (0.5 s) silent WAV blob using `OfflineAudioContext` and POST to `/transcribe` — superseded by using the real greeting WAV
+- **Backend `/warmup` endpoint**: a dedicated `GET /warmup` route in `main.py` running dummy inference through all three pipelines — not needed given the frontend approach
+- **Lazy import → eager import in backend**: move model loading to module-level so Uvicorn startup triggers initialisation — deferred; current approach is sufficient
+- **FastAPI `startup` event for all models**: `@app.on_event("startup")` handler calling warm-up logic for all three pipelines — deferred; covered by frontend warm-up
+- **Show `WARMING UP` state in HUD** *(implemented)*: sphere enters thinking animation and status shows `INIT...`; greeting text held as `INITIALISING…` until sequence completes
 
 ---
 
