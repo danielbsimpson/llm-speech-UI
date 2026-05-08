@@ -1,9 +1,9 @@
 # Speech to text Local AI Interface
 
-A voice-driven, S.T.A.R.L.I.N.G. (Speech‑Triggered Autonomous Reasoning & Local Intelligence Node Generator) web interface powered entirely by a local LLM running on your GPU. No cloud APIs. No subscriptions. Just your hardware.
+A voice-driven, S.T.A.R.L.I.N.G. (Speech‑Triggered Autonomous Reasoning & Local Intelligence Node Generator) web interface powered entirely by a local LLM running on your GPU. No cloud APIs. No subscriptions. No Ollama wrapper. Just your hardware.
 
 ```
-Microphone → Speech-to-Text → Ollama (LLM on GPU) → Text-to-Speech → Browser UI
+Microphone → Speech-to-Text → llama-server (LLM on GPU) → Text-to-Speech → Browser UI
 ```
 
 ![S.T.A.R.L.I.N.G. UI](assets/images/Starling_UI_example.png)
@@ -13,12 +13,14 @@ Microphone → Speech-to-Text → Ollama (LLM on GPU) → Text-to-Speech → Bro
 ## Features
 
 - 🎙 **Voice input** via browser MediaRecorder API → local faster-whisper (Whisper)
-- 🧠 **Local LLM inference** via Ollama (Llama 3, Mistral, Gemma 2, and more)
+- 🧠 **Local LLM inference** directly via llama-server (llama.cpp) — no Ollama wrapper; Ollama kept as a switchable fallback
+- ⚡ **Faster first-token latency** — eliminating the Ollama relay hop gives a noticeable speed improvement; generation speed visible live in the metrics bar
 - 🔊 **Text-to-speech** via Kokoro TTS (local, GPU-accelerated) or browser SpeechSynthesis
 - 📡 **Sentence-chunked streaming** — each sentence is synthesised and played as it arrives
 - 💬 **Multi-turn conversation** with persistent context
 - 🌑 **Living black sphere** — Three.js scene with 7 orbiting light orbs; reacts to audio input and shifts colour/speed per state (idle / listening / thinking / speaking)
 - ⚡ **Model warm-up on load** — Kokoro and Whisper CUDA sessions are pre-heated at startup; UI shows `INITIALISING…` and GPU badges populate before the user speaks
+- 📊 **LLM metrics bar** — live prompt tokens, generation speed (t/s), total time, and context window fill percentage after every response
 - 🔒 **Fully local** — no data leaves your machine
 
 ---
@@ -33,12 +35,14 @@ Microphone → Speech-to-Text → Ollama (LLM on GPU) → Text-to-Speech → Bro
 
 ### Recommended GPU / model pairings
 
-| GPU VRAM | Recommended model | Pull command |
+Model files are read directly from the GGUF format. The easiest source is your existing Ollama blob cache (`%USERPROFILE%\.ollama\models\blobs\`) — no re-download needed.
+
+| GPU VRAM | Recommended model | GGUF quant |
 |---|---|---|
-| 4–6 GB | `gemma3:4b`, `phi4-mini`, `llama3.2:3b` | `ollama pull gemma3:4b` |
-| 6–8 GB | `llama3.1:8b`, `mistral:7b`, `qwen2.5:7b` | `ollama pull llama3.1:8b` |
-| 10–16 GB | `llama3.1:13b`, `mistral:12b` | `ollama pull llama3.1:13b` |
-| 40 GB+ | `llama3.1:70b` | `ollama pull llama3.1:70b` |
+| 4–6 GB | Gemma 3 4B, Phi-4 Mini, Llama 3.2 3B | Q4_K_M |
+| 6–8 GB | Llama 3.1 8B, Mistral 7B, Qwen 2.5 7B | Q4_K_M |
+| 10–16 GB | Llama 3.1 13B, Mistral 12B | Q4_K_M |
+| 40 GB+ | Llama 3.1 70B | Q4_K_M |
 
 ### Currently installed models
 
@@ -52,7 +56,7 @@ Microphone → Speech-to-Text → Ollama (LLM on GPU) → Text-to-Speech → Bro
 | `phi4-mini` | 2.5 GB | Microsoft, strong reasoning for its size |
 | `nomic-embed-text` | 274 MB | Embedding model (for future RAG) |
 
-Change the active model by setting `OLLAMA_MODEL` in `.env` or `localStorage.setItem('starling_model', 'mistral:7b')` in the browser console.
+These are available as Ollama blobs at `%USERPROFILE%\.ollama\models\blobs\`. Point `start_llama_server.bat` at the relevant blob path or copy and rename to a `models/` directory.
 
 ---
 
@@ -64,13 +68,15 @@ llm-speech-UI/
 │   ├── index.html
 │   ├── style.css
 │   └── app.js
-├── backend/            # FastAPI server (optional — needed for Whisper / Kokoro TTS)
+├── backend/            # FastAPI server
 │   ├── main.py
-│   ├── stt.py          # Speech-to-text via faster-whisper
-│   ├── tts.py          # Text-to-speech via Kokoro or Piper
-│   └── ollama.py       # Ollama streaming client
+│   ├── stt.py              # Speech-to-text via faster-whisper
+│   ├── tts.py              # Text-to-speech via Kokoro
+│   ├── llama_server.py     # llama-server streaming relay (DEFAULT, LLM_BACKEND=llama)
+│   └── ollama.py           # Ollama streaming relay (fallback, LLM_BACKEND=ollama)
 ├── scripts/
-│   └── setup.sh        # One-shot install script
+│   ├── setup.sh            # One-shot install script
+│   └── start_llama_server.bat  # Launch llama-server on Windows (CUDA)
 ├── .env.example        # Environment variable template
 ├── requirements.txt    # Python dependencies
 ├── TODO.md             # Project build checklist
@@ -81,18 +87,16 @@ llm-speech-UI/
 
 ## Quickstart
 
-### 1. Install Ollama and pull a model
+### 1. Download llama-server and a model
 
-```bash
-# Install Ollama
-curl -fsSL https://ollama.com/install.sh | sh
+```powershell
+# Download llama-server (Windows CUDA 12) from:
+# https://github.com/ggml-org/llama.cpp/releases/latest
+# Extract to C:\llama.cpp\ and add to PATH
 
-# Pull your chosen model
-ollama pull llama3
-
-# Verify it's running on your GPU
-ollama run llama3
-# then: nvidia-smi (should show GPU memory in use)
+# Model files can be reused from your Ollama blob cache:
+# %USERPROFILE%\.ollama\models\blobs\sha256-<hash>
+# Point start_llama_server.bat at the relevant blob and run it.
 ```
 
 ### 2. Clone the repo
@@ -116,7 +120,7 @@ npx live-server frontend/
 ```bash
 # Create a virtual environment
 python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+source .venv/bin/activate  # Windows: .venv\Scripts\Activate.ps1
 
 # Install dependencies
 pip install -r requirements.txt
@@ -126,14 +130,17 @@ python scripts/download_models.py
 
 # Copy and configure environment variables
 cp .env.example .env
-# Edit .env with your model name, ports, etc.
+# Edit .env — set LLM_BACKEND=llama and configure LLAMA_SERVER_URL / LLAMA_MODEL
 
-# Start the backend (must run from backend/ directory)
+# Start llama-server (Windows)
+.\scripts\start_llama_server.bat
+
+# In a second terminal: start the FastAPI backend (must run from backend/ directory)
 cd backend
 uvicorn main:app --reload --port 8000
 
 # Open the frontend
-open frontend/index.html  # or serve it with live-server
+start http://localhost:8000
 ```
 
 ---
@@ -143,11 +150,18 @@ open frontend/index.html  # or serve it with live-server
 Copy `.env.example` to `.env` and edit as needed:
 
 ```env
-# Ollama
+# LLM backend selector
+LLM_BACKEND=llama          # "llama" = llama-server (default) | "ollama" = Ollama fallback
+
+# llama-server (LLM_BACKEND=llama)
+LLAMA_SERVER_URL=http://localhost:8080
+LLAMA_MODEL=llama3.2-3b    # must match --alias passed to llama-server
+LLAMA_TEMPERATURE=0.7
+
+# Ollama fallback (LLM_BACKEND=ollama)
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=llama3.2:3b
 OLLAMA_TEMPERATURE=0.7
-OLLAMA_SYSTEM_PROMPT=You are S.T.A.R.L.I.N.G. ...
 
 # Backend
 BACKEND_PORT=8000
@@ -157,9 +171,7 @@ WHISPER_MODEL_SIZE=base   # tiny | base | small | medium | large-v3
 WHISPER_DEVICE=cuda       # set to cpu if CUDA unavailable
 
 # TTS — Kokoro ONNX
-ONNX_PROVIDER=DmlExecutionProvider   # DirectML (no CUDA toolkit required)
-# Use CUDAExecutionProvider + onnxruntime-gpu if CUDA 12 + cuDNN 9 are installed
-# Use CPUExecutionProvider if no GPU acceleration is available
+ONNX_PROVIDER=CUDAExecutionProvider   # or DmlExecutionProvider / CPUExecutionProvider
 ```
 
 ---
@@ -189,12 +201,13 @@ To use Whisper, set `STT_ENGINE=whisper` in `.env` and ensure the FastAPI backen
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/chat` | POST | Send a message, stream Ollama response |
+| `/chat` | POST | Send a message, stream LLM response (NDJSON) |
+| `/chat/context-limit` | GET | Return the model's `n_ctx` from llama-server `/props` |
 | `/transcribe` | POST | Upload audio blob, returns transcript |
 | `/synthesize` | POST | Send text, returns WAV audio |
 | `/synthesize/voices` | GET | List available Kokoro voices |
 | `/health` | GET | Check backend status |
-| `/system-status` | GET | Per-model device report (GPU/CPU/IDLE/OFFLINE) |
+| `/system-status` | GET | Per-model device report (GPU/CPU/IDLE/OFFLINE) + active backend info |
 
 ### Example: stream a chat response
 
@@ -208,20 +221,23 @@ curl -X POST http://localhost:8000/chat \
 
 ## Troubleshooting
 
-**Ollama isn't using my GPU**
-Run `nvidia-smi` while a model is loaded. If VRAM usage is 0, check that your CUDA drivers are up to date and that you installed the CUDA version of Ollama.
+**llama-server not found**
+Make sure `llama-server.exe` is either on your PATH or the full path is set in `scripts/start_llama_server.bat`. Download from the [llama.cpp releases page](https://github.com/ggml-org/llama.cpp/releases/latest) — use the `win-cuda-12.x` build.
+
+**Switching back to Ollama**
+Set `LLM_BACKEND=ollama` in `.env` and restart the FastAPI backend. Both Ollama (`:11434`) and llama-server (`:8080`) can run simultaneously — the switch is instant.
+
+**LLM not using my GPU**
+Run `nvidia-smi` while the model is loaded. If VRAM usage is 0, check that `--n-gpu-layers` is set to a high value (999 offloads all layers) in `start_llama_server.bat`.
 
 **Web Speech API not working**
 Chrome and Edge only — Firefox does not support `webkitSpeechRecognition`. Also requires HTTPS or `localhost`.
 
-**CORS errors in the browser**
-If using the FastAPI backend, ensure CORS is enabled in `main.py` for your frontend origin. The `.env` has a `CORS_ORIGIN` variable for this.
-
 **Model responses are slow**
-Try a smaller model (`mistral:7b` is fast and capable). Also check that you're not CPU-falling-back — `ollama ps` shows which layers are on GPU vs CPU.
+Try a smaller model or increase `--n-gpu-layers`. The metrics bar shows live t/s so you can confirm GPU acceleration is active.
 
 **Audio not playing after TTS**
-Browsers enforce an autoplay policy that blocks `audio.play()` until the user has made a gesture (click or keypress) on the page. This is by design — TTS playback is triggered by the user's mic press or send button, which satisfies the policy. The startup greeting is intentionally text-only for this reason.
+Browsers enforce an autoplay policy that blocks `audio.play()` until the user has made a gesture on the page. TTS playback is triggered by the user's mic press or send button, which satisfies the policy.
 
 ---
 
@@ -232,12 +248,14 @@ See [TODO.md](./TODO.md) for the full phased build checklist.
 High-level milestones:
 - [x] Project scaffolding and documentation
 - [x] Ollama integration with streaming responses
+- [x] **llama.cpp migration** — replaced Ollama relay with direct llama-server (OpenAI-compatible); noticeable speed gains confirmed; Ollama kept as a one-line fallback
 - [x] Push-to-talk voice input (MediaRecorder → Whisper STT on GPU)
 - [x] Kokoro TTS with 16 curated voices, sentence-chunked playback, and mode toggle
 - [x] Living black sphere (Three.js) — 7 orbiting light orbs, audio-driven deformation, 4-state machine
 - [x] Per-model GPU/CPU device reporting in footer (`/system-status`)
 - [x] Model warm-up on page load — Kokoro + Whisper pre-heated, GPU badges populated before first mic press
 - [x] GPU dispatch working for both Whisper (CUDA) and Kokoro (DirectML / CUDA)
+- [x] LLM metrics bar — prompt tokens, generation speed, time, and context window fill percentage
 - [ ] Sentence-chunked TTS latency further tuning
 - [ ] Tool use / function calling
 - [ ] Electron desktop app packaging

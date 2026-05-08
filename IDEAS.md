@@ -148,11 +148,11 @@ This stops current audio and drops queued sentences so the new response can star
 
 ---
 
-## IDEA-002 — llama.cpp Migration (Remove Ollama Wrapper)
+## IDEA-002 — llama.cpp Migration (Remove Ollama Wrapper) [COMPLETED ✅]
 
-**Status**: Ready to implement  
+**Status**: Implemented — llama-server running in production as the default backend  
 **Effort**: Small–Medium (backend relay rewrite + one frontend line + install step)  
-**Impact**: Eliminates one relay hop (FastAPI → Ollama → llama.cpp becomes FastAPI → llama.cpp), reducing time-to-first-token and removing Ollama process overhead
+**Impact**: Eliminates one relay hop (FastAPI → Ollama → llama.cpp becomes FastAPI → llama.cpp), reducing time-to-first-token and removing Ollama process overhead. Noticeable speed improvement observed in practice — generation feels snappier, first-token latency is reduced.
 
 ### Problem
 

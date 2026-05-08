@@ -1,6 +1,6 @@
 # S.T.A.R.L.I.N.G. — Speech‑Triggered Autonomous Reasoning & Local Intelligence Node Generator
 
-A voice-driven, S.T.A.R.L.I.N.G.-style web interface powered by a local LLM via Ollama.
+A voice-driven, S.T.A.R.L.I.N.G.-style web interface powered by a local LLM running directly via llama.cpp (llama-server). No cloud APIs. No Ollama wrapper. Just your hardware.
 
 ---
 
@@ -52,11 +52,13 @@ starling-local/
 │   └── app.js
 ├── backend/            # FastAPI server (optional glue layer)
 │   ├── main.py
-│   ├── stt.py          # Speech-to-text (Whisper)
-│   ├── tts.py          # Text-to-speech (Kokoro / Piper)
-│   └── ollama.py       # Ollama API client
+│   ├── stt.py              # Speech-to-text (Whisper)
+│   ├── tts.py              # Text-to-speech (Kokoro / Piper)
+│   ├── llama_server.py     # llama-server (llama.cpp) streaming relay — DEFAULT
+│   └── ollama.py           # Ollama API client (kept as fallback)
 ├── scripts/
-│   └── setup.sh        # One-shot install script
+│   ├── setup.sh            # One-shot install script
+│   └── start_llama_server.bat  # Launch llama-server on Windows (CUDA)
 ├── .env.example
 ├── requirements.txt
 ├── TODO.md
@@ -137,11 +139,11 @@ starling-local/
 
 - [x] Install FastAPI: `pip install fastapi uvicorn python-dotenv`
 - [x] Create `backend/main.py` with route structure
-- [x] Add `/chat` endpoint that accepts text and streams Ollama response
+- [x] Add `/chat` endpoint that accepts text and streams LLM response
 - [x] Add `/transcribe` endpoint (Whisper STT)
 - [x] Add `/synthesize` endpoint (Kokoro TTS) + `/synthesize/voices` GET
 - [x] Add `/health` endpoint
-- [x] Add `/system-status` endpoint — reports GPU vs CPU for Whisper, Kokoro, and Ollama; polled by the frontend after each exchange and shown as colour-coded badges in the footer
+- [x] Add `/system-status` endpoint — reports GPU vs CPU for Whisper, Kokoro, and the active LLM backend; polled by the frontend after each exchange and shown as colour-coded badges in the footer
 - [x] Enable CORS for local frontend
 - [x] Load config from `.env` (model name, API URL, temperature, system prompt, WHISPER_DEVICE, ONNX_PROVIDER)
 - [x] Add basic error handling and logging (CUDA fallback in stt.py and tts.py)
@@ -150,10 +152,10 @@ starling-local/
 
 ## Phase 7 — Streaming & Integration
 
-- [x] Implement streaming response from Ollama in frontend (`ReadableStream`)
+- [x] Implement streaming response from LLM in frontend (`ReadableStream`)
 - [x] Render tokens as they arrive (typewriter effect with blinking cursor)
 - [x] Maintain conversation history array for multi-turn context
-- [x] Pass full conversation history in each Ollama request
+- [x] Pass full conversation history in each LLM request
 - [x] Add a “clear conversation” button
 - [ ] Start TTS only after full response is received — **done**; sentence-chunked TTS still pending (see Issue #1)
 
@@ -209,9 +211,21 @@ Remove background/border styling from message containers so text floats freely. 
 
 ---
 
-## Phase 9 — DevEx & Tooling
+## Phase 10 — llama.cpp Migration (Remove Ollama Wrapper) ✅
 
-- [ ] Write `scripts/setup.sh` to automate full install
+- [x] Research llama-server as a direct llama.cpp endpoint (OpenAI-compatible SSE)
+- [x] Write `backend/llama_server.py` — OpenAI SSE relay re-encoded as Ollama NDJSON so frontend token parsing is unchanged
+- [x] Add `LLM_BACKEND` env var to `main.py`; imports `llama_server` or `ollama` router at startup
+- [x] Keep `ollama.py` as a fully functional fallback — switch by changing one line in `.env`
+- [x] Update `/system-status` to query llama-server `/health` (llama) or Ollama `/api/ps` depending on active backend
+- [x] Add `/chat/context-limit` endpoint (queries llama-server `/props` for `n_ctx`)
+- [x] Update footer label from `OLLAMA localhost:11434` to `LLM <dynamic-addr>` — address populated from `/system-status` response
+- [x] Update `.env` / `.env.example` with `LLAMA_SERVER_URL`, `LLAMA_MODEL`, `LLAMA_TEMPERATURE`, `LLAMA_SYSTEM_PROMPT`
+- [x] Add `scripts/start_llama_server.bat` — CUDA launch helper pointing at Ollama blob path
+- [x] Add LLM performance metrics bar to UI — single row above TTS controls showing prompt tokens, generation speed, total time, and context window fill (with amber/red warnings at 70%/90%)
+- [x] Confirm noticeable speed improvement over Ollama — faster first-token latency, higher t/s observed in metrics bar
+
+## Phase 9 — DevEx & Tooling
 - [ ] Add `Makefile` with targets: `make start`, `make backend`, `make frontend`
 - [ ] Add hot-reload for frontend (e.g. Vite or live-server)
 - [ ] Add hot-reload for backend (`uvicorn --reload`)
