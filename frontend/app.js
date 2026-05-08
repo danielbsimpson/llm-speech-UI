@@ -783,6 +783,14 @@ async function _playBlob(blobPromise, onAudioStart) {
         const ms = performance.now() - _rttStart;
         lmRtt.textContent = ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
         _rttStart = null;  // only measure first-audio; reset for next turn
+        // Inject performance note so the model knows its own latency.
+        const rttSec = ms / 1000;
+        const rttLabel = rttSec < 2 ? 'good' : rttSec < 3.5 ? 'medium' : 'poor';
+        const rttFormatted = ms < 1000 ? `${Math.round(ms)} ms` : `${rttSec.toFixed(1)} s`;
+        conversationHistory.push({
+          role: 'system',
+          content: `[System note — not visible to user] Your total response time for the previous reply was ${rttFormatted} (${rttLabel}: sub-2 s = good, 2–3.5 s = medium, above 3.5 s = poor). This is measured from when the user finished speaking to when audio playback began.`
+        });
       }
       try { if (onAudioStart) onAudioStart(audio); } catch(e) {}
       // Wire the output through an AnalyserNode so the waveform and sphere
