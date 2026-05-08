@@ -128,16 +128,16 @@ html, body {
   transition: width 0.5s ease;
 }
 
-/* Neon border edges */
+/* Border edges */
 .pres-panel .edge {
   position: absolute;
-  background: #00aaff;
-  box-shadow: 0 0 8px #00aaff, 0 0 24px rgba(0, 170, 255, 0.4);
+  background: rgba(255, 255, 255, 0.75);
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.2);
 }
 
 /* Top edge — expands outward from centre, delayed until panel is open */
 .pres-panel .edge-top {
-  top: 0; left: 50%; height: 2px; width: 0;
+  top: 0; left: 50%; height: 1px; width: 0;
   transform: translateX(-50%);
   transition: width 0.25s ease 0.45s;
 }
@@ -146,14 +146,14 @@ html, body {
 }
 
 /* Side edges — grow downward after top completes */
-.pres-panel .edge-left  { top: 0; left: 0;  width: 2px; height: 0; transition: height 0.25s ease 0.70s; }
-.pres-panel .edge-right { top: 0; right: 0; width: 2px; height: 0; transition: height 0.25s ease 0.70s; }
+.pres-panel .edge-left  { top: 0; left: 0;  width: 1px; height: 0; transition: height 0.25s ease 0.70s; }
+.pres-panel .edge-right { top: 0; right: 0; width: 1px; height: 0; transition: height 0.25s ease 0.70s; }
 .starling.pres-mode .edge-left,
 .starling.pres-mode .edge-right { height: 100%; }
 
 /* Bottom edge — closes rectangle after sides complete */
 .pres-panel .edge-bottom {
-  bottom: 0; left: 50%; height: 2px; width: 0;
+  bottom: 0; left: 50%; height: 1px; width: 0;
   transform: translateX(-50%);
   transition: width 0.25s ease 0.95s;
 }
