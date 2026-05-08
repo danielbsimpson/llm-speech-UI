@@ -145,6 +145,73 @@ start http://localhost:8000
 
 ---
 
+## Running the Project (Windows — PowerShell)
+
+> These are the exact commands to get everything running from scratch each session.
+
+### Prerequisites
+- Virtual environment already created and dependencies installed (see **Quickstart → 3b** above)
+- `llama-server.exe` on your PATH or path set inside `scripts\start_llama_server.bat`
+
+---
+
+### Step 1 — Start the LLM (Terminal 1)
+
+Open a PowerShell terminal in the repository root and run:
+
+```powershell
+.\scripts\start_llama_server.bat
+```
+
+Wait until you see:
+
+```
+main: server is listening on http://127.0.0.1:8080
+```
+
+Leave this terminal running.
+
+---
+
+### Step 2 — Start the Backend + UI (Terminal 2)
+
+Open a **second** PowerShell terminal in the repository root and run:
+
+```powershell
+.venv\Scripts\activate
+cd backend
+uvicorn main:app --reload --port 8000
+```
+
+Wait until you see:
+
+```
+Application startup complete.
+```
+
+Leave this terminal running.
+
+---
+
+### Step 3 — Open the UI
+
+Open **Chrome** or **Edge** and navigate to:
+
+```
+http://localhost:8000
+```
+
+The UI will display `INITIALISING…` while Kokoro and Whisper warm up on the GPU. Once the GPU badges appear, you are ready to speak.
+
+---
+
+### Stopping the project
+
+- Press `Ctrl + C` in Terminal 2 to stop the FastAPI backend.
+- Press `Ctrl + C` in Terminal 1 to stop llama-server.
+
+---
+
 ## Configuration
 
 Copy `.env.example` to `.env` and edit as needed:
