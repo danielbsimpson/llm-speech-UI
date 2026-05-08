@@ -45,7 +45,7 @@
     <!-- Two-column body -->
     <div class="body-cols">
 
-      <!-- Left column: sphere + waveform, vertically centred -->
+      <!-- Left column: sphere + waveform + chat (repositions below sphere in pres-mode) -->
       <div class="col-left">
         <div class="ring-section">
           <div class="ring-wrap">
@@ -54,14 +54,36 @@
           </div>
           <div class="waveform" id="waveform" aria-hidden="true"></div>
         </div>
-      </div>
-
-      <!-- Right column: conversation -->
-      <div class="col-right">
+        <!-- Chat panel — hidden in normal mode, slides in below sphere in pres-mode -->
         <div class="chat-panel">
           <div class="chat-inner" id="chat-inner"></div>
         </div>
       </div>
+
+      <!-- Neon image panel — zero-width in normal mode -->
+      <div class="pres-panel" id="pres-panel">
+        <span class="edge edge-top"></span>
+        <span class="edge edge-left"></span>
+        <span class="edge edge-right"></span>
+        <span class="edge edge-bottom"></span>
+        <img class="pres-image" id="pres-image" src="/assets/images/Daniel_Simpson.jpg" alt="" />
+      </div>
+
+      <!-- Dossier text panel — zero-width in normal mode -->
+      <div class="pres-dossier" id="pres-dossier">
+        <div class="pres-dossier-title" id="pres-dossier-title">SUBJECT UNKNOWN</div>
+        <div class="pres-dossier-body" id="pres-dossier-body">
+          Awaiting intelligence data. No records on file for this subject.
+        </div>
+        <div class="pres-dossier-meta" id="pres-dossier-meta">
+          <span class="key">STATUS</span><span class="val">UNCLASSIFIED</span>
+          <span class="key">SOURCE</span><span class="val">LOCAL KB</span>
+          <span class="key">UPDATED</span><span class="val">—</span>
+        </div>
+      </div>
+
+      <!-- Right column: empty shell, shrinks to zero in pres-mode -->
+      <div class="col-right"></div>
 
     </div><!-- /body-cols -->
 

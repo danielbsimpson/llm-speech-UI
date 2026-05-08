@@ -1,7 +1,8 @@
 import os
+import re
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -107,8 +108,36 @@ async def system_status():
     }
 
 
-# ── Serve frontend ────────────────────────────────────────────────────────────
+# ── Dossier endpoint ─────────────────────────────────────────────────────────
 _FRONTEND = Path(__file__).parent.parent / "frontend"
+_ASSETS   = Path(__file__).parent.parent / "assets"
+
+@app.get("/dossier/{key}")
+def get_dossier(key: str):
+    """Parse a dossier markdown file and return structured JSON."""
+    # Sanitize key — only lowercase alphanumeric, underscores, hyphens allowed
+    if not re.fullmatch(r'[a-z0-9_\-]+', key):
+        raise HTTPException(status_code=400, detail="Invalid dossier key")
+    path = _ASSETS / "dossier_descriptions" / f"{key}.md"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Dossier not found")
+
+    lines = path.read_text(encoding="utf-8").splitlines()
+    meta: dict = {}
+    body = ""
+    for i, line in enumerate(lines):
+        if line.startswith("Description of target:"):
+            body = "\n".join(lines[i + 1:]).strip()
+            break
+        m = re.match(r'^([^:]+):\s*(.+)$', line)
+        if m:
+            meta[m.group(1).strip()] = m.group(2).strip()
+
+    title = meta.pop("Name", key.replace("_", " ").title())
+    return {"title": title, "body": body, "meta": meta}
+
+
+# ── Serve frontend ────────────────────────────────────────────────────────────
 
 @app.get("/")
 def serve_index():
@@ -117,4 +146,5 @@ def serve_index():
         headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
     )
 
+app.mount("/assets", StaticFiles(directory=_ASSETS), name="assets")
 app.mount("/", StaticFiles(directory=_FRONTEND), name="frontend")

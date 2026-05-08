@@ -1,6 +1,88 @@
 // ── Config ────────────────────────────────────────────────────────────────────
 const BACKEND_BASE = 'http://localhost:8000';
 const MODEL        = localStorage.getItem('starling_model') || 'llama3.2:3b';
+
+// ── Presentation mode ─────────────────────────────────────────────────────────
+// Matches dossier trigger verbs and optionally captures a subject after "on/for/about/regarding"
+const PRES_TRIGGER_RE = /\b(?:open|show|pull up|display|launch|activate)\b.*?\bdossier\b(?:\s+(?:on|for|about|regarding)\s+(.+))?/i;
+
+function _parseTrigger(text) {
+  const m = text.match(PRES_TRIGGER_RE);
+  if (!m) return { matched: false, subject: null };
+  return { matched: true, subject: m[1] ? m[1].trim() : null };
+}
+
+function _matchesExitPhrase(text) {
+  const lower = text.toLowerCase();
+  const patterns = [
+    /\bclose\b.*\bdossier\b/,
+    /\bexit\b.*\bdossier\b/,
+    /\bhide\b.*\bdossier\b/,
+    /\bgo\s+back\b/,
+    /\bback\s+to\b.*\bchat\b/,
+    /\bresume\b.*\bchat\b/,
+    /\breturn\b.*\bchat\b/,
+  ];
+  return patterns.some(p => p.test(lower));
+}
+
+let _presSubject = null;
+
+// Fetch and populate the dossier panel from the backend-parsed markdown file.
+// Returns the parsed { title, body, meta } on success, or null on failure.
+async function _loadDossier(key) {
+  try {
+    const res = await fetch(`${BACKEND_BASE}/dossier/${encodeURIComponent(key)}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const { title, body, meta } = data;
+
+    presTitle.textContent = title.toUpperCase();
+    presBody.textContent  = body;
+
+    let html = '';
+    for (const [k, v] of Object.entries(meta)) {
+      html += `<span class="key">${k.toUpperCase()}</span><span class="val">${v}</span>`;
+    }
+    presMeta.innerHTML = html;
+    return data;
+  } catch { /* silently ignore — placeholder text remains */ }
+  return null;
+}
+
+function _subjectToKey(subject) {
+  // "Daniel Simpson" → "daniel_simpson"
+  return subject.toLowerCase().replace(/\s+/g, '_');
+}
+
+async function enterPresMode(subject) {
+  _presSubject = subject ?? null;
+  starlingEl.classList.add('pres-mode');
+  const key = _presSubject ? _subjectToKey(_presSubject) : 'daniel_simpson';
+  const dossier = await _loadDossier(key);
+  if (dossier) {
+    const metaLines = Object.entries(dossier.meta).map(([k, v]) => `${k}: ${v}`).join('\n');
+    const prompt =
+      `[DOSSIER ACTIVATED]\n\nSubject Profile:\n${metaLines}\n\nDescription:\n${dossier.body}\n\n` +
+      `Based on this dossier, deliver a concise spoken briefing — three to four sentences, spoken naturally — ` +
+      `as if presenting to an intelligence analyst. Summarise who this person is, what they do, and what is most notable about them.`;
+    sendToOllama(prompt);
+  }
+}
+
+const _DOSSIER_PLACEHOLDER_META =
+  '<span class="key">STATUS</span><span class="val">UNCLASSIFIED</span>' +
+  '<span class="key">SOURCE</span><span class="val">LOCAL KB</span>' +
+  '<span class="key">UPDATED</span><span class="val">—</span>';
+
+function exitPresMode() {
+  _presSubject = null;
+  starlingEl.classList.remove('pres-mode');
+  presTitle.textContent  = 'SUBJECT UNKNOWN';
+  presBody.textContent   = 'Awaiting intelligence data. No records on file for this subject.';
+  presMeta.innerHTML     = _DOSSIER_PLACEHOLDER_META;
+}
+
 // Build a context block injected at the top of the system prompt on every boot.
 // Add any additional runtime facts here — they are re-evaluated each page load.
 function _buildBootContext() {
@@ -71,6 +153,10 @@ const lmCtx     = document.getElementById('lm-ctx');
 const lmCtxPct  = document.getElementById('lm-ctx-pct');
 const lmCtxFill = document.getElementById('lm-ctx-fill');
 const lmRtt     = document.getElementById('lm-rtt');
+
+const presTitle = document.getElementById('pres-dossier-title');
+const presBody  = document.getElementById('pres-dossier-body');
+const presMeta  = document.getElementById('pres-dossier-meta');
 
 // ── Sphere shared state ─────────────────────────────────────────────────────────────
 const sphereStateRef    = { current: 'idle' };
@@ -868,6 +954,21 @@ async function handleSend() {
   _rttStart = performance.now();            // start RTT clock for text-input path
   clearAudioQueue();  // stop any in-progress speech before new request
   textInput.value = '';
+
+  // ── Presentation mode intercept ──────────────────────────────────────────
+  if (_matchesExitPhrase(text)) {
+    exitPresMode();
+    setState('idle');
+    return;
+  }
+  const _triggerResult = _parseTrigger(text);
+  if (_triggerResult.matched) {
+    enterPresMode(_triggerResult.subject);
+    setState('idle');
+    return;
+  }
+  // ────────────────────────────────────────────────────────────────────────
+
   appendMessage('user', text);
   await sendToOllama(text);
   fetchSystemStatus();
@@ -881,6 +982,7 @@ textInput.addEventListener('keydown', e => {
 // ── Clear conversation ────────────────────────────────────────────────────────
 clearBtn.addEventListener('click', () => {
   clearAudioQueue();
+  exitPresMode();
   conversationHistory = [{ role: 'system', content: SYSTEM_PROMPT }];
   chatInner.innerHTML = '';
   setState('idle');
@@ -924,6 +1026,21 @@ async function startRecording() {
         if (!r.ok) throw new Error(`STT ${r.status}`);
         const { transcript } = await r.json();
         if (!transcript) { setState('idle'); return; }
+
+        // ── Presentation mode intercept ──────────────────────────────────
+        if (_matchesExitPhrase(transcript)) {
+          exitPresMode();
+          setState('idle');
+          return;
+        }
+        const _triggerResult = _parseTrigger(transcript);
+        if (_triggerResult.matched) {
+          enterPresMode(_triggerResult.subject);
+          setState('idle');
+          return;
+        }
+        // ────────────────────────────────────────────────────────────────
+
         appendMessage('user', transcript);
         const rttSnap = _rttStart;      // preserve timestamp set in stopRecording()
         clearAudioQueue();              // stop any in-progress speech — resets _rttStart

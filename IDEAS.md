@@ -402,7 +402,7 @@ Each phase must work reliably before moving to the next. The trigger words and v
 
 ### Phase 0 — Voice Trigger → Black Rectangle
 
-**Status**: 🔴 Not started  
+**Status**: ✅ Complete  
 **Effort**: Small (frontend-only, no backend changes)  
 **Goal**: Prove the voice trigger intercept works end-to-end. When the user says a trigger phrase, a plain black rectangle appears in the upper portion of the conversation column. Nothing else changes. No animation yet.
 
@@ -577,7 +577,7 @@ Also call `exitPresMode()` inside the clear button handler.
 
 ### Phase 1 — Neon Border Animation
 
-**Status**: 🔴 Not started — implement after Phase 0 is verified  
+**Status**: ✅ Complete  
 **Effort**: Small–Medium (CSS animation + JS sequencing)  
 **Goal**: Replace the plain rectangle appearance with a cinematic neon blue border draw animation. The panel content area and interior remain black; only the border animates. The sequence:
 
@@ -667,7 +667,7 @@ On exit, removing `.pres-mode` reverses all transitions simultaneously — the b
 
 ### Phase 2 — Image Drop Into Panel
 
-**Status**: 🔴 Not started — implement after Phase 1 animation is verified  
+**Status**: ✅ Complete  
 **Effort**: Small (frontend-only — static image, no RAG yet)  
 **Goal**: Once the neon border animation completes, display a static placeholder image inside the panel. This confirms the layout mechanics and timing before any backend image-fetching is introduced. Use a single local test image from `assets/images/`.
 
@@ -728,7 +728,7 @@ On exit, removing `.pres-mode` reverses all transitions simultaneously — the b
 
 ### Phase 3 — Full Visual Reconfiguration
 
-**Status**: 🔴 Not started — implement after Phase 2 is verified  
+**Status**: ✅ Complete  
 **Effort**: Medium (CSS layout transitions + JS state updates)  
 **Goal**: When the dossier trigger fires, the entire UI shifts into a four-zone presentation layout. The conversation window does **not** disappear — it repositions under the sphere in the left column. The sphere shifts up and left. The neon image panel appears near centre. The dossier text panel appears on the right. Everything reverses cleanly on exit. Filler text used in this phase; real data arrives in Phase 4.
 
