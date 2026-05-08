@@ -70,6 +70,7 @@ const lmTime    = document.getElementById('lm-time');
 const lmCtx     = document.getElementById('lm-ctx');
 const lmCtxPct  = document.getElementById('lm-ctx-pct');
 const lmCtxFill = document.getElementById('lm-ctx-fill');
+const lmRtt     = document.getElementById('lm-rtt');
 
 // ── Sphere shared state ─────────────────────────────────────────────────────────────
 const sphereStateRef    = { current: 'idle' };
@@ -92,6 +93,7 @@ UI_HOVER_IDS.forEach(id => {
 
 // ── LLM metrics ────────────────────────────────────────────────────────────────────
 let _ctxLimit = null;  // fetched from /chat/context-limit at startup (llama backend only)
+let _rttStart = null;  // performance.now() snapshot when user finishes input; cleared per-request
 
 // Known context window sizes for common models — used as a fallback when
 // /chat/context-limit is unavailable (llama-server not yet running at page load).
@@ -776,6 +778,12 @@ async function _playBlob(blobPromise, onAudioStart) {
     audio.onerror = done;
     // Wait for metadata so audio.duration is a valid finite number before starting text stream
     audio.onloadedmetadata = () => {
+      // Capture RTT on the very first audio chunk of this response.
+      if (_rttStart !== null && lmRtt) {
+        const ms = performance.now() - _rttStart;
+        lmRtt.textContent = ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
+        _rttStart = null;  // only measure first-audio; reset for next turn
+      }
       try { if (onAudioStart) onAudioStart(audio); } catch(e) {}
       // Wire the output through an AnalyserNode so the waveform and sphere
       // react to the TTS audio being played back.
@@ -815,6 +823,7 @@ function enqueueSpeak(text, onStart) {
 function clearAudioQueue() {
   _audioGeneration++;                       // invalidates all enqueued callbacks
   _playbackChain = Promise.resolve();
+  _rttStart = null;                         // discard RTT for abandoned request
   if (_activeAudio) { _activeAudio.pause(); _activeAudio = null; }
   if (_textStreamTimer !== null) { clearInterval(_textStreamTimer); _textStreamTimer = null; }
   if (window.speechSynthesis) window.speechSynthesis.cancel();
@@ -848,6 +857,7 @@ async function speak(text) {
 async function handleSend() {
   const text = textInput.value.trim();
   if (!text) return;
+  _rttStart = performance.now();            // start RTT clock for text-input path
   clearAudioQueue();  // stop any in-progress speech before new request
   textInput.value = '';
   appendMessage('user', text);
@@ -907,7 +917,9 @@ async function startRecording() {
         const { transcript } = await r.json();
         if (!transcript) { setState('idle'); return; }
         appendMessage('user', transcript);
-        clearAudioQueue();  // stop any in-progress speech before new request
+        const rttSnap = _rttStart;      // preserve timestamp set in stopRecording()
+        clearAudioQueue();              // stop any in-progress speech — resets _rttStart
+        _rttStart = rttSnap;            // restore so RTT is measured from mic release
         await sendToOllama(transcript);
         fetchSystemStatus();
       } catch (err) {
@@ -929,6 +941,7 @@ async function startRecording() {
 
 function stopRecording() {
   if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    _rttStart = performance.now();          // start RTT clock for voice path
     mediaRecorder.stop();
     micBtn.classList.remove('recording');
   }
