@@ -1,14 +1,14 @@
-# S.T.A.R.L.I.N.G. — Improvement Ideas
+﻿# S.T.A.R.L.I.N.G. — Improvement Ideas
 
 A running log of planned enhancements, each with enough detail to roll out independently.
 
 ---
 
-## IDEA-001 — Sentence-Chunked TTS (Reduce Audio Lag) [COMPLETED✅]
+## IDEA-001 — Sentence-Chunked TTS (Reduce Audio Lag) [COMPLETED]
 
 **Status**: Ready to implement  
 **Effort**: Small (frontend-only)  
-**Impact**: First audio plays ~1–3 s after response starts instead of after it fully completes
+**Impact**: First audio plays ~1-3 s after response starts instead of after it fully completes
 
 ### Problem
 
@@ -142,16 +142,16 @@ This stops current audio and drops queued sentences so the new response can star
 
 | Metric | Before | After |
 |---|---|---|
-| Time to first audio | Full generation + synthesis (~5–10 s) | First sentence synthesis only (~0.5–1.5 s after it completes in stream) |
-| Backend calls per response | 1 | N (one per sentence, ~3–6 for a typical response) |
+| Time to first audio | Full generation + synthesis (~5-10 s) | First sentence synthesis only (~0.5-1.5 s after it completes in stream) |
+| Backend calls per response | 1 | N (one per sentence, ~3-6 for a typical response) |
 | Perceived responsiveness | Response appears, long silence, then audio | Text and audio advance together |
 
 ---
 
-## IDEA-002 — llama.cpp Migration (Remove Ollama Wrapper) [COMPLETED ✅]
+## IDEA-002 — llama.cpp Migration (Remove Ollama Wrapper) [COMPLETED]
 
 **Status**: Implemented — llama-server running in production as the default backend  
-**Effort**: Small–Medium (backend relay rewrite + one frontend line + install step)  
+**Effort**: Small-Medium (backend relay rewrite + one frontend line + install step)  
 **Impact**: Eliminates one relay hop (FastAPI → Ollama → llama.cpp becomes FastAPI → llama.cpp), reducing time-to-first-token and removing Ollama process overhead. Noticeable speed improvement observed in practice — generation feels snappier, first-token latency is reduced.
 
 ### Problem
@@ -381,332 +381,92 @@ Both Ollama (port 11434) and llama-server (port 8080) can run simultaneously. Ke
 | Metric | Before | After |
 |---|---|---|
 | Relay hops | 3 (frontend → FastAPI → Ollama → llama.cpp) | 2 (frontend → FastAPI → llama.cpp) |
-| Time to first token | Ollama relay adds ~20–80 ms per request | Eliminated |
+| Time to first token | Ollama relay adds ~20-80 ms per request | Eliminated |
 | API format | Custom Ollama NDJSON | Standard OpenAI SSE (compatible with more tooling) |
 | Model management | `ollama pull` + Ollama daemon | Raw GGUF files, no daemon required |
 | Multiple models | Ollama handles transparently | llama-server router mode handles transparently |
 
 ---
 
-## IDEA-003 — Contextual Image Display (RAG)
+## IDEA-003 — Voice-Triggered Presentation Mode
 
-**Status**: Ready to implement (Phase 0 → Phase 1 sequence — see below)  
-**Effort**: Phase 0: Small (frontend-only) · Phase 1: Medium (backend + prompt engineering)  
-**Impact**: Phase 0 establishes voice-triggered layout foundation with no backend dependency. Phase 1 populates it with real images from a local manifest.
+**Status**: In progress — implement phases sequentially; do not jump ahead  
+**Effort**: Grows phase by phase — each phase is independently testable before the next begins  
+**Impact**: Establishes a voice-controlled visual presentation system, built incrementally from a simple rectangle to a full dossier layout, with RAG image loading added only once the UI mechanics are solid
+
+### Guiding principle
+
+Each phase must work reliably before moving to the next. The trigger words and visual transitions are the foundation — everything else (images, dossier text, RAG) is layered on top only after the interaction model is confirmed working.
 
 ---
 
-### Phase 0 — Voice-Triggered Dossier Shell
+### Phase 0 — Voice Trigger → Black Rectangle
 
-**Status**: Implement first — required foundation for Phase 1 and IDEA-004  
+**Status**: 🔴 Not started  
 **Effort**: Small (frontend-only, no backend changes)  
-**Impact**: When the user says a dossier trigger phrase, the chat window dims and a reserved placeholder region appears — establishing the layout shell that Phase 1 will fill with images and IDEA-004 will expand into full presentation mode. No data is fetched; the LLM is not involved in the trigger decision.
+**Goal**: Prove the voice trigger intercept works end-to-end. When the user says a trigger phrase, a plain black rectangle appears in the upper portion of the conversation column. Nothing else changes. No animation yet.
 
 #### What this phase does
 
-Client-side string matching is applied to the STT transcript immediately after transcription, before `sendToOllama()` is called. If a known trigger phrase is detected the UI shifts into `.dossier-mode` and the transcript is swallowed — no LLM round-trip occurs. An exit phrase (or a button, added in IDEA-004) reverts the layout.
+- Client-side regex matching intercepts the STT transcript before `sendToOllama()` is called
+- A trigger match sets a CSS class on `.starling` that reveals a `.pres-panel` div overlaid at the top of the right column
+- An exit phrase (or the clear button) removes the class and hides the panel
+- No LLM call is made for trigger or exit phrases — they are swallowed entirely
+- **Critically**: the trigger regex captures everything after the dossier keyword as a `subject` string. `enterPresMode(subject)` accepts this from Phase 0 even though Phase 0 does nothing with it yet. This means Phase 4 can simply start consuming `subject` without touching Phase 0 logic.
 
-```
-user speaks "show me the dossier"
-  → STT transcribes
-  → _matchesPhraseList() intercepts before Ollama call
-  → enterDossierMode() — .starling gains .dossier-mode
-  → .dossier-shell slides in (top-right placeholder)
-  → .chat-panel dims
-  → no Ollama call, no audio response
-  → (Phase 1 will populate .dossier-shell with an image here)
-```
+#### Trigger design — regex with subject capture
 
-#### Trigger phrase lists
-
-Matching is case-insensitive and uses `String.includes` — the phrase just needs to appear anywhere in the transcript.
+The trigger is a single regex rather than a list of strings. This allows `"Pull up the dossier on Daniel Simpson"` to match the trigger **and** capture `"Daniel Simpson"` as the subject in one pass.
 
 ```js
-const DOSSIER_TRIGGERS = [
-  'show me the dossier',
-  'can i see the dossier',
-  'what does the dossier look like',
-  'open the dossier',
-  'pull up the dossier',
-  'bring up the dossier',
-  'display the dossier',
-];
+// Matches: (verb) [the] dossier [on|for|about|regarding] [subject]
+// Capture group 1 = subject (may be undefined if no subject was spoken)
+const PRES_TRIGGER_RE = /\b(?:open|show|pull up|display|launch|activate)\b.*?\bdossier\b(?:\s+(?:on|for|about|regarding)\s+(.+))?/i;
 
-const DOSSIER_EXIT_PHRASES = [
-  'go back',
-  'close the dossier',
+const PRES_EXIT_PHRASES = [
   'close dossier',
   'exit dossier',
+  'go back',
   'back to chat',
-  'resume chat'
+  'resume chat',
+  'hide dossier',
 ];
 ```
 
-Exit phrases are checked **before** triggers so `"close the dossier"` never accidentally matches a trigger.
+Exit phrases are checked **before** the trigger regex so `"close dossier"` never accidentally matches a trigger.
+
+#### Subject extraction
+
+```js
+/**
+ * Test whether `text` matches a dossier trigger.
+ * Returns { matched: true, subject: "Daniel Simpson" } or { matched: false, subject: null }.
+ * subject is null when no subject was spoken (e.g. bare "open dossier").
+ */
+function _parseTrigger(text) {
+  const m = text.match(PRES_TRIGGER_RE);
+  if (!m) return { matched: false, subject: null };
+  const subject = m[1] ? m[1].trim() : null;
+  return { matched: true, subject };
+}
+
+function _matchesExitPhrase(text) {
+  const lower = text.toLowerCase();
+  return PRES_EXIT_PHRASES.some(p => lower.includes(p));
+}
+```
 
 #### HTML changes (`frontend/index.html`)
 
-Add a `.dossier-shell` sibling inside the flex row that IDEA-004 Step 1 will fully restructure. For Phase 0, it is a styled placeholder:
+Add `.pres-panel` as the first child of `.col-right`, above `.chat-panel`:
 
 ```html
-<!-- Add immediately before the existing .chat-panel -->
-<div class="dossier-shell" id="dossier-shell">
-  <div class="dossier-placeholder">
-    <span class="dossier-placeholder-label">DOSSIER</span>
-  </div>
-</div>
-```
+<div class="col-right">
 
-Phase 1 (below) replaces the inner `.dossier-placeholder` content with an `<img>` and caption. IDEA-004 Step 1 absorbs this element into the `.body-row` restructure.
+  <!-- Presentation panel — hidden until trigger fires -->
+  <div class="pres-panel" id="pres-panel"></div>
 
-#### CSS changes (`frontend/style.css`)
-
-```css
-/* ── Dossier shell ───────────────────────────────────────────────────────── */
-.dossier-shell {
-  width: 0;
-  min-width: 0;
-  overflow: hidden;
-  opacity: 0;
-  flex-shrink: 0;
-  transition: width 0.5s ease, opacity 0.5s ease;
-}
-
-.starling.dossier-mode .dossier-shell {
-  width: 280px;
-  min-width: 280px;
-  opacity: 1;
-}
-
-.dossier-placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 200px;
-  border: 1px dashed rgba(200,200,200,0.12);
-  border-radius: 4px;
-  margin: 16px 16px 0 0;
-}
-
-.dossier-placeholder-label {
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 0.65rem;
-  letter-spacing: 0.25em;
-  color: rgba(200,200,200,0.2);
-  text-transform: uppercase;
-}
-
-/* Chat dims (not fully hidden) in Phase 0 — full collapse comes in IDEA-004 */
-.starling.dossier-mode .chat-panel {
-  opacity: 0.3;
-  transition: opacity 0.4s ease;
-}
-```
-
-#### JS changes (`frontend/app.js`)
-
-**Add constants and helpers (near the top, after `MODEL` declaration):**
-
-```js
-const DOSSIER_TRIGGERS = [
-  'show me the dossier', 'can i see the dossier', 'what does the dossier look like',
-  'open the dossier', 'pull up the dossier', 'bring up the dossier', 'display the dossier',
-];
-
-const DOSSIER_EXIT_PHRASES = [
-  'go back', 'close the dossier', 'close dossier', 'exit dossier', 'back to chat', 'resume chat',
-];
-
-function _matchesPhraseList(text, list) {
-  const lower = text.toLowerCase();
-  return list.some(p => lower.includes(p));
-}
-
-function enterDossierMode() {
-  document.querySelector('.starling').classList.add('dossier-mode');
-}
-
-function exitDossierMode() {
-  document.querySelector('.starling').classList.remove('dossier-mode');
-}
-```
-
-**Hook into the STT result handler, before `sendToOllama(transcript)` is called:**
-
-```js
-// Check exit phrases first, then triggers — order matters
-if (_matchesPhraseList(transcript, DOSSIER_EXIT_PHRASES)) {
-  exitDossierMode();
-  setState('idle');
-  return;   // swallow transcript — no Ollama call
-}
-if (_matchesPhraseList(transcript, DOSSIER_TRIGGERS)) {
-  enterDossierMode();
-  setState('idle');
-  return;   // swallow transcript — pure layout command
-}
-```
-
-**Wire `exitDossierMode()` into the clear button handler:**
-
-```js
-clearBtn.addEventListener('click', () => {
-  conversationHistory = [{ role: 'system', content: SYSTEM_PROMPT }];
-  chatInner.innerHTML = '';
-  exitDossierMode();   // add this line
-  setState('idle');
-});
-```
-
-#### Files changed (Phase 0 only)
-
-| File | Change |
-|---|---|
-| `frontend/index.html` | Add `.dossier-shell` with `.dossier-placeholder` before `.chat-panel` |
-| `frontend/style.css` | Add `.dossier-shell`, `.dossier-placeholder`, `.dossier-placeholder-label`, `.dossier-mode` overrides |
-| `frontend/app.js` | `DOSSIER_TRIGGERS`, `DOSSIER_EXIT_PHRASES`, `_matchesPhraseList`, `enterDossierMode`, `exitDossierMode`; STT result intercept; clear-btn wiring |
-| `backend/*` | **None** |
-
-#### Progression path
-
-| Phase | What's added | Depends on |
-|---|---|---|
-| **0 (this)** | Trigger phrases → `.dossier-mode` CSS class → placeholder shell | Nothing |
-| **1 (Phase 1 below)** | Manifest + backend + real image populates the shell | Phase 0 HTML structure |
-| **2 (IDEA-004)** | Full presentation mode — chat collapses fully, pres-output, ring shift | Phase 0 + Phase 1 |
-
----
-
-### Phase 1 — Manifest + Image Display (RAG)
-
-### Problem
-
-STARLING is purely audio/text. When a user asks "Tell me about Apollo 13" or "Who is Richard Feynman?", there is no visual component — the user only hears and reads a response. A curated local image library could be surfaced automatically to accompany relevant answers.
-
-### Solution
-
-Three components working together:
-
-1. **Trigger tag** — the system prompt instructs STARLING to prepend `[IMAGE:key]` to responses about subjects that have an image in the manifest. The frontend strips the tag before displaying text.
-2. **Local manifest** — `assets/images/manifest.json` is the single source of truth for which images exist. The backend exposes it via `/rag/manifest` and resolves keys to files via `/rag/image/{key}`.
-3. **Image panel** — a new UI region to the left of the chat box (flex row) displays the image with a caption, fades in on trigger, and clears on conversation reset.
-
-```
-user asks about X
-  → LLM prepends [IMAGE:apollo_13] to response
-  → app.js strips tag, calls triggerImage("apollo_13")
-  → GET /rag/image/apollo_13 → streams file from assets/images/
-  → .image-panel fades in with image + caption
-  → STARLING narrates while image is displayed
-```
-
----
-
-### Pre-requisites
-
-- Populate `assets/images/` with your curated image library (JPG/PNG/WebP)
-- The manifest key vocabulary should be injected into the system prompt at startup — load `GET /rag/manifest` in `app.js` init and append the key list to `SYSTEM_PROMPT` before the first message
-
----
-
-### Implementation Plan
-
-#### Step 1 — Create the image manifest
-
-Create `assets/images/manifest.json`:
-
-```json
-[
-  { "key": "apollo_13",       "label": "Apollo 13",        "file": "apollo_13.jpg",       "tags": ["nasa", "space", "mission"] },
-  { "key": "richard_feynman", "label": "Richard Feynman",  "file": "richard_feynman.jpg", "tags": ["physics", "person"] },
-  { "key": "turing_machine",  "label": "Turing Machine",   "file": "turing_machine.png",  "tags": ["computer science", "alan turing"] }
-]
-```
-
-Schema: each entry must have `key` (lowercase_underscore, unique), `label` (display name), `file` (filename relative to `assets/images/`), `tags` (optional, for future filtering).
-
----
-
-#### Step 2 — Create `backend/rag.py`
-
-New FastAPI router with two endpoints:
-
-```python
-"""backend/rag.py — Local image RAG router."""
-
-import json
-import mimetypes
-import os
-from pathlib import Path
-
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
-
-router = APIRouter(prefix="/rag", tags=["rag"])
-
-ASSETS_DIR = Path(__file__).parent.parent / "assets" / "images"
-MANIFEST_PATH = ASSETS_DIR / "manifest.json"
-
-
-def _load_manifest() -> list[dict]:
-    if not MANIFEST_PATH.exists():
-        return []
-    with open(MANIFEST_PATH, encoding="utf-8") as f:
-        return json.load(f)
-
-
-@router.get("/manifest")
-def get_manifest():
-    """Return the full image manifest."""
-    return _load_manifest()
-
-
-@router.get("/image/{key}")
-def get_image(key: str):
-    """Resolve a manifest key to an image file and stream it."""
-    manifest = _load_manifest()
-    entry = next((e for e in manifest if e["key"] == key), None)
-    if entry is None:
-        raise HTTPException(status_code=404, detail=f"No image for key '{key}'")
-    image_path = ASSETS_DIR / entry["file"]
-    if not image_path.exists():
-        raise HTTPException(status_code=404, detail=f"Image file not found: {entry['file']}")
-    # Prevent path traversal — ensure resolved path stays within ASSETS_DIR
-    if not image_path.resolve().is_relative_to(ASSETS_DIR.resolve()):
-        raise HTTPException(status_code=400, detail="Invalid path")
-    media_type = mimetypes.guess_type(str(image_path))[0] or "application/octet-stream"
-    return FileResponse(str(image_path), media_type=media_type)
-```
-
----
-
-#### Step 3 — Register the router in `backend/main.py`
-
-```python
-# Add alongside existing router imports:
-from rag import router as rag_router
-
-# Add alongside existing include_router calls:
-app.include_router(rag_router)
-```
-
----
-
-#### Step 4 — Add `.image-panel` to `frontend/index.html`
-
-Wrap the existing `.chat-panel` and a new `.image-panel` in a shared flex row container, inserted between the ring section and the controls:
-
-```html
-<!-- Replace the standalone <div class="chat-panel"> with this block: -->
-<div class="content-row">
-
-  <!-- Image panel — hidden until a trigger fires -->
-  <div class="image-panel" id="image-panel">
-    <img class="image-display" id="image-display" alt="" />
-    <div class="image-caption" id="image-caption"></div>
-  </div>
-
-  <!-- Chat -->
+  <!-- Conversation -->
   <div class="chat-panel">
     <div class="chat-inner" id="chat-inner"></div>
   </div>
@@ -714,830 +474,466 @@ Wrap the existing `.chat-panel` and a new `.image-panel` in a shared flex row co
 </div>
 ```
 
----
-
-#### Step 5 — Add image panel styles to `frontend/style.css`
+#### CSS changes (`frontend/style.css`)
 
 ```css
-/* ── Content row (image panel + chat side-by-side) ───────────────────────── */
-.content-row {
-  display: flex;
-  flex-direction: row;
-  flex: 1;
-  gap: 16px;
-  min-height: 0;          /* allow children to shrink inside flex column */
-  overflow: hidden;
-}
-
-/* ── Image panel ─────────────────────────────────────────────────────────── */
-.image-panel {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  width: 0;
-  min-width: 0;
-  overflow: hidden;
-  opacity: 0;
-  transition: width 0.4s ease, opacity 0.4s ease, min-width 0.4s ease;
+/* ── Presentation panel ──────────────────────────────────────────────────── */
+.pres-panel {
   flex-shrink: 0;
+  height: 0;
+  overflow: hidden;
+  background: #000000;
+  transition: height 0.35s ease;
 }
 
-.image-panel.visible {
-  width: 260px;
-  min-width: 260px;
-  opacity: 1;
+.starling.pres-mode .pres-panel {
+  height: 55%;   /* covers the upper portion of the right column */
 }
 
-.image-display {
-  width: 100%;
-  max-height: 220px;
-  object-fit: contain;
-  border: 1px solid rgba(200,200,200,0.1);
-  border-radius: 4px;
-  background: rgba(255,255,255,0.02);
-}
-
-.image-caption {
-  margin-top: 8px;
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 0.68rem;
-  color: rgba(200,200,200,0.5);
-  text-align: center;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+/* Dim conversation when panel is open */
+.starling.pres-mode .chat-panel {
+  opacity: 0.25;
+  pointer-events: none;
+  transition: opacity 0.35s ease;
 }
 ```
 
-Remove the standalone `flex: 1` from `.chat-panel` if it was set there (the `content-row` flex layout now controls sizing) and ensure `.chat-panel` keeps `flex: 1; min-width: 0` so it fills remaining space:
+#### JS changes (`frontend/app.js`)
 
-```css
-.chat-panel {
-  flex: 1;
-  min-width: 0;
-  /* all other existing properties unchanged */
-}
-```
-
----
-
-#### Step 6 — Add `triggerImage` / `clearImage` and manifest loading to `frontend/app.js`
-
-**6a — Load the manifest at startup and inject keys into system prompt:**
+Add near the top, after `MODEL`:
 
 ```js
-// Replace the static SYSTEM_PROMPT declaration with a two-phase init:
-let SYSTEM_PROMPT =
-  'You are S.T.A.R.L.I.N.G. (Speech‑Triggered Autonomous Reasoning & Local Intelligence Node Generator), ' +
-  'a highly capable local AI assistant. Be concise, precise, and direct. Avoid unnecessary pleasantries.';
+// Matches dossier trigger verbs and optionally captures a subject after "on/for/about/regarding"
+const PRES_TRIGGER_RE = /\b(?:open|show|pull up|display|launch|activate)\b.*?\bdossier\b(?:\s+(?:on|for|about|regarding)\s+(.+))?/i;
 
-async function loadManifestAndPrimePrompt() {
-  try {
-    const res = await fetch(`${BACKEND_BASE}/rag/manifest`);
-    if (!res.ok) return;
-    const manifest = await res.json();
-    if (!manifest.length) return;
-    const keyList = manifest.map(e => `  • ${e.key} — ${e.label}`).join('\n');
-    SYSTEM_PROMPT +=
-      '\n\nYou have access to a local image library. If your response is primarily about one of the ' +
-      'following subjects, prepend your entire response with [IMAGE:key] on its own line (no other text ' +
-      'before it), where key is taken exactly from this list. Only use keys from this list — never invent one.\n' +
-      keyList;
-    // Update the system message already in conversationHistory
-    conversationHistory[0].content = SYSTEM_PROMPT;
-  } catch { /* manifest unavailable — proceed without image support */ }
+const PRES_EXIT_PHRASES = [
+  'close dossier', 'exit dossier', 'go back',
+  'back to chat', 'resume chat', 'hide dossier',
+];
+
+function _parseTrigger(text) {
+  const m = text.match(PRES_TRIGGER_RE);
+  if (!m) return { matched: false, subject: null };
+  return { matched: true, subject: m[1] ? m[1].trim() : null };
+}
+
+function _matchesExitPhrase(text) {
+  const lower = text.toLowerCase();
+  return PRES_EXIT_PHRASES.some(p => lower.includes(p));
+}
+
+// subject is stored now, consumed by Phase 4 RAG lookup — unused in Phase 0
+let _presSubject = null;
+
+function enterPresMode(subject) {
+  _presSubject = subject ?? null;   // Phase 4 reads this to query the manifest
+  starlingEl.classList.add('pres-mode');
+}
+function exitPresMode() {
+  _presSubject = null;
+  starlingEl.classList.remove('pres-mode');
 }
 ```
 
-Call `loadManifestAndPrimePrompt()` in the init block at the bottom of `app.js` alongside `loadVoices()`.
-
-**6b — Add DOM refs for the image panel:**
+Hook into the STT result handler immediately before the `sendToOllama()` call:
 
 ```js
-const imagePanel   = document.getElementById('image-panel');
-const imageDisplay = document.getElementById('image-display');
-const imageCaption = document.getElementById('image-caption');
-```
-
-**6c — Add `triggerImage` and `clearImage` helpers:**
-
-```js
-async function triggerImage(key) {
-  try {
-    // Validate key exists by fetching the manifest entry (lightweight)
-    const manifestRes = await fetch(`${BACKEND_BASE}/rag/manifest`);
-    if (!manifestRes.ok) return;
-    const manifest = await manifestRes.json();
-    const entry = manifest.find(e => e.key === key);
-    if (!entry) return;                           // unknown key — silently ignore
-
-    imageDisplay.src     = `${BACKEND_BASE}/rag/image/${encodeURIComponent(key)}`;
-    imageCaption.textContent = entry.label.toUpperCase();
-    imagePanel.classList.add('visible');
-  } catch { /* ignore — image display is non-critical */ }
-}
-
-function clearImage() {
-  imagePanel.classList.remove('visible');
-  // Delay src clear until after the CSS transition finishes
-  setTimeout(() => {
-    imageDisplay.src     = '';
-    imageCaption.textContent = '';
-  }, 450);
-}
-```
-
-**6d — Parse `[IMAGE:key]` tag in the token loop inside `sendToOllama()`:**
-
-The tag will appear as the first token(s) of the response. Buffer the opening characters until the closing `]` is confirmed, then extract and strip:
-
-```js
-let imageTagBuf = '';     // accumulates prefix until tag is resolved
-let imageTagDone = false; // true once the opening of the response is confirmed
-
-// Inside the token loop, replace the token accumulation block:
-full    += token;
-txt.textContent = full;
-
-if (!imageTagDone) {
-  imageTagBuf += token;
-  // Wait until we have enough content to either confirm or rule out a tag
-  if (imageTagBuf.includes(']') || imageTagBuf.length > 40) {
-    const tagMatch = imageTagBuf.match(/^\[IMAGE:([a-z0-9_]+)\]\n?/);
-    if (tagMatch) {
-      const key = tagMatch[1];
-      // Strip the tag from displayed text
-      full = full.replace(tagMatch[0], '');
-      txt.textContent = full;
-      triggerImage(key);   // fire-and-forget — non-blocking
-    }
-    imageTagDone = true;
-  }
-}
-```
-
-**6e — Wire `clearImage()` into the clear button handler:**
-
-```js
-clearBtn.addEventListener('click', () => {
-  conversationHistory = [{ role: 'system', content: SYSTEM_PROMPT }];
-  chatInner.innerHTML = '';
-  clearImage();
+if (_matchesExitPhrase(transcript)) {
+  exitPresMode();
   setState('idle');
-});
+  return;
+}
+const triggerResult = _parseTrigger(transcript);
+if (triggerResult.matched) {
+  enterPresMode(triggerResult.subject);
+  setState('idle');
+  return;
+}
 ```
 
----
+> **Why this matters for Phase 4**: When the user says `"Pull up the dossier on Daniel Simpson"`, `_parseTrigger` returns `{ matched: true, subject: "Daniel Simpson" }`. Phase 4 will read `_presSubject` (or receive it as a parameter) and use it to fuzzy-search `manifest.json` for the closest key. The visual trigger, subject capture, and RAG lookup all originate from the same utterance — nothing is lost.
 
-### Files Changed
+Also call `exitPresMode()` inside the clear button handler.
+
+#### Verification
+
+- Say `"open dossier"` → black rectangle appears; `_presSubject` is `null`
+- Say `"pull up the dossier on Daniel Simpson"` → black rectangle appears; `console.log(_presSubject)` prints `"Daniel Simpson"`
+- Say `"show dossier for Apollo 13"` → rectangle appears; `_presSubject` is `"Apollo 13"`
+- Say an exit phrase → rectangle disappears, chat returns to full opacity, `_presSubject` is cleared
+- Normal conversation still works without any visual changes
+- No console errors, no LLM calls on trigger/exit phrases
+
+#### Files changed
 
 | File | Change |
 |---|---|
-| `assets/images/manifest.json` | Create — image manifest schema |
-| `backend/rag.py` | Create — `/rag/manifest` and `/rag/image/{key}` endpoints |
-| `backend/main.py` | Add `from rag import router as rag_router` + `app.include_router(rag_router)` |
-| `frontend/index.html` | Wrap chat panel in `.content-row`; add `.image-panel` sibling |
-| `frontend/style.css` | Add `.content-row`, `.image-panel`, `.image-display`, `.image-caption` styles |
-| `frontend/app.js` | Manifest load + prompt injection; `triggerImage` / `clearImage`; tag parser in token loop; clear-btn wiring |
-| `backend/stt.py` | **None** |
-| `backend/tts.py` | **None** |
+| `frontend/index.html` | Add `.pres-panel` inside `.col-right` |
+| `frontend/style.css` | Add `.pres-panel` and `.pres-mode` overrides |
+| `frontend/app.js` | Phrase lists, `enterPresMode`/`exitPresMode`, STT intercept, clear-btn wiring |
+| `backend/*` | **None** |
 
 ---
 
-### Verification Checklist
+### Phase 1 — Neon Border Animation
 
-1. Add 2–3 test images to `assets/images/` and populate `manifest.json`
-2. Ask "Tell me about [subject]" — confirm `[IMAGE:key]` tag is stripped from displayed text, image panel slides in, caption appears
-3. Ask about a topic with no matching key — confirm panel stays hidden and no console errors
-4. Ask a follow-up on a different subject — confirm image updates to the new one
-5. Press the clear button — confirm image panel fades out
-6. Hit `GET /rag/image/nonexistent_key` directly — confirm 404 response with no server crash
-7. Remove a file from `assets/images/` while keeping its manifest entry — confirm 404 returned gracefully
+**Status**: 🔴 Not started — implement after Phase 0 is verified  
+**Effort**: Small–Medium (CSS animation + JS sequencing)  
+**Goal**: Replace the plain rectangle appearance with a cinematic neon blue border draw animation. The panel content area and interior remain black; only the border animates. The sequence:
 
----
+1. A single neon blue point appears at the horizontal centre of the top edge of the panel
+2. It extends left and right simultaneously as a horizontal line until it reaches both side edges
+3. From each corner, vertical lines extend downward simultaneously until they reach the bottom corners
+4. A bottom horizontal line closes the rectangle, completing the outline
 
-### Design Decisions to Confirm Before Implementing
+The entire sequence plays over ~800 ms. Once the outline is complete, the panel interior is fully revealed and ready for content (Phase 2).
 
-| Decision | Options | Recommendation |
-|---|---|---|
-| Panel layout | Side-by-side (left) vs. full-width strip above chat | Side-by-side — matches user description; better on widescreen |
-| Image panel width | Fixed (260 px) vs. percentage (25%) | Fixed — predictable at all viewport widths |
-| Key injection | Static in prompt vs. dynamic load at startup | Dynamic (`loadManifestAndPrimePrompt`) — manifest stays as single source of truth |
-| Auto-clear on new message | Yes vs. keep until replaced | Keep until replaced — less distracting; new query will overwrite naturally |
-| Multi-image per response | First tag only vs. gallery | First tag only for v1 |
+#### Implementation approach
 
----
+The animation is driven entirely by CSS `clip-path` or pseudo-element `width`/`height` transitions, sequenced with `animation-delay`. No canvas or JS drawing required.
 
-### Scope Boundaries
-
-- Local curated images only — no web search, no scraping
-- No image generation (Stable Diffusion etc.)
-- No video or GIF support in v1
-- "RAG" = key-lookup against a local JSON manifest, not vector embeddings — intentionally lightweight
-
----
-
-### Expected Result
-
-| Scenario | Before | After |
-|---|---|---|
-| "Tell me about Apollo 13" | Text + audio only | Image appears left of chat; STARLING narrates |
-| Topic with no image | Text + audio | No change — panel stays hidden |
-| Clear conversation | Chat wipes | Chat wipes + image panel fades out |
-| Unknown key hallucinated by LLM | N/A | 404 swallowed silently; no panel shown |
-
----
-
-## IDEA-004 — Dynamic Presentation Mode (Context-Driven Layout Shift)
-
-**Status**: Ready to implement (depends on IDEA-003 Phase 0 HTML structure + Phase 1 image infrastructure)  
-**Effort**: Medium (CSS transitions + ~100 lines across 3 files)  
-**Impact**: When STARLING answers a topic with a contextual image, the entire UI reconfigures — image slides in from the left, ring shifts right, chat collapses, and STARLING's output streams below the ring in a clean focused view. A button or voice command reverts to conversation mode.
-
-### Problem
-
-IDEA-003 adds an image panel beside the chat box, but both regions compete for space and the overall feel is still a "chat with an image attachment". For topics that warrant a visual — a person, place, mission, concept — a more dramatic layout shift turns STARLING into a presentation system: image on the left, voice and text output on the right, conversational history hidden until needed.
-
-### Solution
-
-A single CSS class `.presentation-mode` added to `.starling` drives every transition via pre-defined CSS rules. No DOM manipulation at runtime — elements only change `width`, `opacity`, `max-height`, and `flex` values, all of which CSS can interpolate smoothly. A mirrored text element (`#pres-output`) below the ring shows the streaming response while the chat bubble accumulates silently in the background.
+A clean approach uses four absolutely-positioned pseudo-elements (or four `<span>` elements) inside `.pres-panel`, each representing one edge, animated in sequence:
 
 ```
-[IMAGE:key] tag fires
-  → enterPresentationMode(key)
-      → .starling gains .presentation-mode
-      → .image-panel slides in (width 0 → 45%)
-      → .ring-section shifts right (centred in now-narrower .main-col)
-      → .chat-panel collapses (opacity → 0, max-height → 0)
-      → #pres-output expands below ring
-  → token loop mirrors text to both .msg.asst and #pres-output
-  → STARLING speaks while image is displayed
-
-user says "go back" / clicks EXIT button
-  → exitPresentationMode()
-      → .presentation-mode removed
-      → all transitions reverse
-      → chat history reappears intact
+span.edge-top    — starts at 50% width centred, expands to 100% width
+span.edge-left   — starts at 0 height at top-left corner, grows downward
+span.edge-right  — starts at 0 height at top-right corner, grows downward
+span.edge-bottom — starts at 0 width centred at bottom, expands to 100%
 ```
 
----
+Each edge is a 1–2 px neon blue line (`#00aaff` or similar) with a soft `box-shadow` glow. The delays are chained so the corners are reached before the next edge starts.
 
-### Pre-requisites
+```css
+.starling.pres-mode .pres-panel {
+  height: 55%;
+}
 
-- IDEA-003 Phase 0 must be implemented first — this idea reuses the `.dossier-mode`/`.dossier-shell` structure, `enterDossierMode`/`exitDossierMode` helpers, and the `_matchesPhraseList` intercept
-- IDEA-003 Phase 1 provides the manifest and `[IMAGE:key]` trigger tag that populates the panel
-- The HTML restructuring in this idea supersedes IDEA-003 Phase 0's placeholder element; implement IDEA-004 Step 1 and the placeholder is replaced in one pass
+/* All edges hidden by default */
+.pres-panel .edge { position: absolute; background: #00aaff; box-shadow: 0 0 8px #00aaff, 0 0 24px rgba(0,170,255,0.4); }
 
----
+/* Top edge — horizontal, expands from centre */
+.pres-panel .edge-top {
+  top: 0; left: 50%; height: 1px; width: 0;
+  transform: translateX(-50%);
+  transition: width 0.25s ease;
+}
+.starling.pres-mode .edge-top { width: 100%; }
 
-### Implementation Plan
+/* Side edges — expand downward, delayed until top is complete */
+.pres-panel .edge-left  { top: 0; left: 0;   width: 1px; height: 0; transition: height 0.25s ease 0.25s; }
+.pres-panel .edge-right { top: 0; right: 0;  width: 1px; height: 0; transition: height 0.25s ease 0.25s; }
+.starling.pres-mode .edge-left,
+.starling.pres-mode .edge-right { height: 100%; }
 
-#### Step 1 — Restructure `frontend/index.html`
+/* Bottom edge — horizontal, closes the rectangle */
+.pres-panel .edge-bottom {
+  bottom: 0; left: 50%; height: 1px; width: 0;
+  transform: translateX(-50%);
+  transition: width 0.25s ease 0.5s;
+}
+.starling.pres-mode .edge-bottom { width: 100%; }
+```
 
-Replace the standalone `.chat-panel` block (and any IDEA-003 `.content-row` if already added) with a new `.body-row` / `.main-col` structure:
+Add the four edge spans to `.pres-panel` in the HTML:
 
 ```html
-<!-- Replaces everything between the ring-section and controls divs -->
-<div class="body-row">
+<div class="pres-panel" id="pres-panel">
+  <span class="edge edge-top"></span>
+  <span class="edge edge-left"></span>
+  <span class="edge edge-right"></span>
+  <span class="edge edge-bottom"></span>
+</div>
+```
 
-  <!-- Image panel — hidden until a trigger fires -->
-  <div class="image-panel" id="image-panel">
-    <img class="image-display" id="image-display" alt="" />
-    <div class="image-caption" id="image-caption"></div>
-    <button class="pres-exit-btn" id="pres-exit-btn" title="Return to conversation">EXIT ✕</button>
+On exit, removing `.pres-mode` reverses all transitions simultaneously — the border collapses. If a more deliberate collapse sequence is wanted, a `.pres-closing` class can be added briefly to reverse the delays.
+
+#### Verification
+
+- Trigger phrase → point appears at top centre, line draws left and right, corners turn, verticals descend, bottom closes — full sequence in ~800 ms
+- Exit phrase → border fades/collapses cleanly
+- Animation feels smooth at 60 fps — adjust durations if choppy
+- Interior remains black throughout
+
+#### Files changed
+
+| File | Change |
+|---|---|
+| `frontend/index.html` | Add four `.edge` spans inside `.pres-panel` |
+| `frontend/style.css` | Edge styles and sequenced transition delays |
+| `frontend/app.js` | **None** — phase 0 JS is sufficient |
+| `backend/*` | **None** |
+
+---
+
+### Phase 2 — Image Drop Into Panel
+
+**Status**: 🔴 Not started — implement after Phase 1 animation is verified  
+**Effort**: Small (frontend-only — static image, no RAG yet)  
+**Goal**: Once the neon border animation completes, display a static placeholder image inside the panel. This confirms the layout mechanics and timing before any backend image-fetching is introduced. Use a single local test image from `assets/images/`.
+
+#### What this phase does
+
+- After `.pres-mode` is applied and the border animation completes (~800 ms), an `<img>` inside `.pres-panel` fades in
+- The image is hardcoded to a local test file for now — no manifest, no API call
+- The image fills the panel interior with `object-fit: contain`, centred, with a small inset from the neon border
+
+#### HTML changes
+
+```html
+<div class="pres-panel" id="pres-panel">
+  <span class="edge edge-top"></span>
+  <span class="edge edge-left"></span>
+  <span class="edge edge-right"></span>
+  <span class="edge edge-bottom"></span>
+  <img class="pres-image" id="pres-image" src="assets/images/test.jpg" alt="" />
+</div>
+```
+
+#### CSS changes
+
+```css
+.pres-image {
+  position: absolute;
+  inset: 10px;          /* small gap inside the neon border */
+  width: calc(100% - 20px);
+  height: calc(100% - 20px);
+  object-fit: contain;
+  opacity: 0;
+  transition: opacity 0.4s ease 0.85s;   /* delay until border animation completes */
+}
+
+.starling.pres-mode .pres-image {
+  opacity: 1;
+}
+```
+
+#### Verification
+
+- Trigger → border draws → image fades in cleanly after border is complete
+- Image is contained within the neon border with a visible inset gap
+- Exit → image disappears with the panel
+- No layout shift in the conversation column while panel is open
+
+#### Files changed
+
+| File | Change |
+|---|---|
+| `frontend/index.html` | Add `.pres-image` inside `.pres-panel` |
+| `frontend/style.css` | `.pres-image` with delayed fade-in |
+| `assets/images/` | Add one test image (`test.jpg`) |
+| `frontend/app.js` | **None** |
+| `backend/*` | **None** |
+
+---
+
+### Phase 3 — Full Visual Reconfiguration
+
+**Status**: 🔴 Not started — implement after Phase 2 is verified  
+**Effort**: Medium (CSS layout transitions + JS state updates)  
+**Goal**: When the dossier is opened, the entire UI reconfigures into presentation mode. The conversation window disappears. The sphere and orbs shift slightly left. The panel repositions to be more centred. A structured dossier-style text panel appears to the right of the image, using filler text for now.
+
+#### Layout in presentation mode
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  [header — full width, unchanged]                       │
+├──────────────────────────────────────────────────────────┤
+│                                                          │
+│   ●  ← sphere shifts slightly left                      │
+│                                                          │
+│         ┌──────────────────┐  ┌──────────────────────┐  │
+│         │  [neon border]   │  │  SUBJECT             │  │
+│         │                  │  │  ─────────────────   │  │
+│         │   [image]        │  │  Lorem ipsum...      │  │
+│         │                  │  │                      │  │
+│         └──────────────────┘  │  FIELD    VALUE      │  │
+│                                │  FIELD    VALUE      │  │
+│                                └──────────────────────┘  │
+├──────────────────────────────────────────────────────────┤
+│  [bottom bar — mic, input, send — unchanged]             │
+│  [footer — unchanged]                                    │
+└─────────────────────────────────────────────────────────┘
+```
+
+#### What changes
+
+**Sphere / left column**: `translateX` shift of ~30–40 px left via CSS transform on `.col-left` in `.pres-mode`. The sphere stays in the left column; it just moves slightly toward the edge to make visual space.
+
+**Conversation column**: `.chat-panel` transitions to `opacity: 0; max-height: 0; pointer-events: none` — fully hidden but still in the DOM (history is preserved for when the user exits).
+
+**Panel repositions**: `.pres-panel` transitions from `height: 55%` (Phase 0–2) to a more centred, fixed-height layout. The panel is split into two sub-regions side-by-side: `.pres-image-wrap` (left, holds the neon border + image) and `.pres-dossier` (right, holds structured text).
+
+**Dossier text panel**: `.pres-dossier` appears to the right of the image with a HUD-style layout — a title, a horizontal rule, a body paragraph, and a key/value metadata grid. All populated with filler text in this phase.
+
+#### CSS additions
+
+```css
+/* Sphere shifts left in presentation mode */
+.starling.pres-mode .col-left {
+  transform: translateX(-36px);
+  transition: transform 0.5s ease;
+}
+
+/* Panel becomes a flex row in presentation mode */
+.starling.pres-mode .pres-panel {
+  display: flex;
+  flex-direction: row;
+  gap: 20px;
+  padding: 16px;
+  height: 60%;
+  align-items: stretch;
+}
+
+/* Image wrap — left side of panel */
+.pres-image-wrap {
+  position: relative;
+  flex: 1;
+}
+
+/* Dossier text — right side of panel */
+.pres-dossier {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  opacity: 0;
+  transition: opacity 0.4s ease 0.85s;
+  overflow: hidden;
+}
+.starling.pres-mode .pres-dossier { opacity: 1; }
+
+.pres-dossier-title {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 14px;
+  letter-spacing: 4px;
+  color: #e0e0e0;
+  text-transform: uppercase;
+  border-bottom: 0.5px solid rgba(0, 170, 255, 0.4);
+  padding-bottom: 8px;
+}
+.pres-dossier-body {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  color: rgba(200,200,200,0.65);
+  line-height: 1.75;
+}
+.pres-dossier-meta {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 16px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 1.5px;
+}
+.pres-dossier-meta .key { color: rgba(0,170,255,0.6); text-transform: uppercase; }
+.pres-dossier-meta .val { color: rgba(200,200,200,0.55); }
+```
+
+#### HTML additions
+
+Restructure `.pres-panel` interior:
+
+```html
+<div class="pres-panel" id="pres-panel">
+  <!-- Image region (neon border + image) -->
+  <div class="pres-image-wrap">
+    <span class="edge edge-top"></span>
+    <span class="edge edge-left"></span>
+    <span class="edge edge-right"></span>
+    <span class="edge edge-bottom"></span>
+    <img class="pres-image" id="pres-image" src="" alt="" />
   </div>
 
-  <!-- Main column — contains ring + chat + presentation output -->
-  <div class="main-col">
-
-    <!-- Ring + waveform (already exists — move inside .main-col) -->
-    <div class="ring-section">
-      <!-- existing ring-wrap and waveform contents unchanged -->
+  <!-- Dossier text region -->
+  <div class="pres-dossier" id="pres-dossier">
+    <div class="pres-dossier-title" id="pres-dossier-title">SUBJECT UNKNOWN</div>
+    <div class="pres-dossier-body" id="pres-dossier-body">
+      Awaiting intelligence data. No records on file for this subject.
+      Cross-referencing local knowledge base.
     </div>
-
-    <!-- Presentation output — visible only in presentation mode -->
-    <div class="pres-output" id="pres-output"></div>
-
-    <!-- Chat — visible only in conversation mode -->
-    <div class="chat-panel">
-      <div class="chat-inner" id="chat-inner"></div>
+    <div class="pres-dossier-meta">
+      <span class="key">STATUS</span><span class="val">UNCLASSIFIED</span>
+      <span class="key">SOURCE</span><span class="val">LOCAL KB</span>
+      <span class="key">UPDATED</span><span class="val">—</span>
     </div>
-
   </div>
 </div>
 ```
 
-> Note: the existing `.ring-section` HTML is moved inside `.main-col` — its internal contents are unchanged.
+#### Verification
 
----
+- Trigger → sphere shifts left, conversation disappears, panel expands, neon border draws, image fades in, dossier text panel fades in alongside it
+- All transitions feel smooth and choreographed — adjust delays if elements clash visually
+- Exit → everything reverses cleanly, conversation reappears at full opacity, sphere returns to centre
+- Bottom bar (mic, input, send) and footer remain unchanged throughout
 
-#### Step 2 — Add layout and mode styles to `frontend/style.css`
-
-**Body row and main column:**
-
-```css
-/* ── Body row (image panel + main column side-by-side) ───────────────────── */
-.body-row {
-  display: flex;
-  flex-direction: row;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-  gap: 0;
-}
-
-.main-col {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  transition: padding-left 0.5s ease;
-}
-```
-
-**Image panel (replaces IDEA-003 Step 5 version — updated for presentation mode):**
-
-```css
-/* ── Image panel ─────────────────────────────────────────────────────────── */
-.image-panel {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  width: 0;
-  min-width: 0;
-  overflow: hidden;
-  opacity: 0;
-  flex-shrink: 0;
-  padding-top: 0;
-  transition: width 0.5s ease, opacity 0.5s ease, padding 0.5s ease;
-  position: relative;
-}
-
-.starling.presentation-mode .image-panel {
-  width: 45%;
-  min-width: 240px;
-  opacity: 1;
-  padding-top: 16px;
-  padding-right: 20px;
-}
-
-.image-display {
-  width: 100%;
-  max-height: 55vh;
-  object-fit: contain;
-  border: 1px solid rgba(200,200,200,0.1);
-  border-radius: 4px;
-  background: rgba(255,255,255,0.02);
-}
-
-.image-caption {
-  margin-top: 10px;
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 0.68rem;
-  color: rgba(200,200,200,0.5);
-  text-align: center;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-/* Exit button inside image panel */
-.pres-exit-btn {
-  display: none;
-  margin-top: 18px;
-  padding: 6px 16px;
-  background: rgba(200,200,200,0.04);
-  border: 0.5px solid rgba(200,200,200,0.18);
-  border-radius: 5px;
-  color: rgba(200,200,200,0.45);
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 9px;
-  letter-spacing: 2px;
-  cursor: pointer;
-  transition: color 0.2s, border-color 0.2s, background 0.2s;
-}
-.pres-exit-btn:hover {
-  color: var(--c);
-  border-color: rgba(200,200,200,0.35);
-  background: rgba(200,200,200,0.08);
-}
-.starling.presentation-mode .pres-exit-btn {
-  display: block;
-}
-```
-
-**Chat panel — collapses in presentation mode:**
-
-```css
-/* Extend the existing .chat-panel rule: */
-.chat-panel {
-  transition: opacity 0.4s ease, max-height 0.5s ease, margin 0.4s ease;
-  max-height: 9999px;   /* large enough to never clip in conversation mode */
-}
-
-.starling.presentation-mode .chat-panel {
-  opacity: 0;
-  max-height: 0;
-  margin-bottom: 0;
-  pointer-events: none;
-  overflow: hidden;
-}
-```
-
-**Presentation output — expands below ring in presentation mode:**
-
-```css
-/* ── Presentation output ─────────────────────────────────────────────────── */
-.pres-output {
-  max-height: 0;
-  opacity: 0;
-  overflow: hidden;
-  font-size: 15px;
-  line-height: 1.75;
-  color: var(--text);
-  padding: 0 14px;
-  transition: opacity 0.4s ease 0.25s, max-height 0.5s ease;
-}
-
-.starling.presentation-mode .pres-output {
-  max-height: 40vh;
-  opacity: 1;
-  overflow-y: auto;
-  padding: 12px 14px;
-}
-
-.pres-output::-webkit-scrollbar { width: 3px; }
-.pres-output::-webkit-scrollbar-track { background: transparent; }
-.pres-output::-webkit-scrollbar-thumb { background: rgba(200,200,200,0.1); border-radius: 2px; }
-```
-
-**Ring section — reduce bottom margin in presentation mode so output sits closer:**
-
-```css
-.starling.presentation-mode .ring-section {
-  margin-bottom: 4px;
-}
-```
-
-**Waveform — optionally hide in presentation mode (set to taste):**
-
-```css
-.starling.presentation-mode .waveform {
-  opacity: 0.35;   /* dim rather than hide — keeps audio activity visible */
-}
-```
-
----
-
-#### Step 3 — Add mode functions to `frontend/app.js`
-
-**3a — New DOM refs:**
-
-```js
-const presOutput  = document.getElementById('pres-output');
-const presExitBtn = document.getElementById('pres-exit-btn');
-```
-
-**3b — Mode toggle functions:**
-
-```js
-let _inPresentationMode = false;
-
-function enterPresentationMode() {
-  _inPresentationMode = true;
-  starlingEl.classList.add('presentation-mode');
-  presOutput.textContent = '';
-}
-
-function exitPresentationMode() {
-  _inPresentationMode = false;
-  starlingEl.classList.remove('presentation-mode');
-  presOutput.textContent = '';
-}
-```
-
-**3c — Exit button listener:**
-
-```js
-presExitBtn.addEventListener('click', exitPresentationMode);
-```
-
-**3d — Keyword intercept (voice/text revert):**
-
-Add at the top of `handleSend()`, before the `sendToOllama()` call, and also at the top of the `mediaRecorder.onstop` handler, before the `sendToOllama()` call:
-
-```js
-const REVERT_PHRASES = ['go back', 'exit', 'show chat', 'conversation mode', 'close image', 'hide image'];
-if (_inPresentationMode && REVERT_PHRASES.some(p => text.toLowerCase().includes(p))) {
-  exitPresentationMode();
-  return;   // do not forward to LLM
-}
-```
-
-**3e — Enter presentation mode from the image trigger:**
-
-In the existing `triggerImage(key)` function (from IDEA-003), add `enterPresentationMode()` before setting the image src:
-
-```js
-async function triggerImage(key) {
-  try {
-    const manifestRes = await fetch(`${BACKEND_BASE}/rag/manifest`);
-    if (!manifestRes.ok) return;
-    const manifest = await manifestRes.json();
-    const entry = manifest.find(e => e.key === key);
-    if (!entry) return;
-
-    enterPresentationMode();   // ← add this line
-
-    imageDisplay.src         = `${BACKEND_BASE}/rag/image/${encodeURIComponent(key)}`;
-    imageCaption.textContent = entry.label.toUpperCase();
-    imagePanel.classList.add('visible');
-  } catch { }
-}
-```
-
-**3f — Mirror streaming text to `#pres-output` in the token loop:**
-
-Inside `sendToOllama()`, immediately after `txt.textContent = full;`, add:
-
-```js
-if (_inPresentationMode) {
-  presOutput.textContent = full;
-  presOutput.scrollTop   = presOutput.scrollHeight;
-}
-```
-
-**3g — Clear presentation state on conversation clear:**
-
-In the `clearBtn` event listener, add `exitPresentationMode()` alongside `clearImage()`:
-
-```js
-clearBtn.addEventListener('click', () => {
-  conversationHistory = [{ role: 'system', content: SYSTEM_PROMPT }];
-  chatInner.innerHTML = '';
-  clearImage();
-  exitPresentationMode();
-  setState('idle');
-});
-```
-
----
-
-### Files Changed
+#### Files changed
 
 | File | Change |
 |---|---|
-| `frontend/index.html` | Wrap ring + chat in `.body-row` / `.main-col`; add `.image-panel`; add `.pres-output`; add `.pres-exit-btn` |
-| `frontend/style.css` | Add `.body-row`, `.main-col`, `.pres-output`, `.pres-exit-btn`; add `.presentation-mode` overrides for chat-panel, ring-section, waveform, image-panel |
-| `frontend/app.js` | `enterPresentationMode` / `exitPresentationMode`; DOM refs; exit-btn listener; keyword intercept in send/mic handlers; text mirror in token loop; clear-btn wiring |
-| `assets/images/manifest.json` | Create (shared with IDEA-003) |
-| `backend/rag.py` | Create (shared with IDEA-003) |
-| `backend/main.py` | Add RAG router (shared with IDEA-003) |
-| `backend/stt.py` | **None** |
-| `backend/tts.py` | **None** |
+| `frontend/index.html` | Restructure `.pres-panel` interior; add `.pres-image-wrap` and `.pres-dossier` |
+| `frontend/style.css` | `.pres-mode` layout transitions; `.pres-dossier` styles; sphere shift |
+| `frontend/app.js` | Minor — update `enterPresMode`/`exitPresMode` if additional class/state logic is needed |
+| `backend/*` | **None** |
 
 ---
 
-### Relationship to IDEA-003
+### Phase 4 — RAG Image and Text Population
 
-IDEA-003 and IDEA-004 share backend infrastructure (manifest, `/rag/` endpoints) and the `[IMAGE:key]` trigger tag. The HTML restructuring in IDEA-004 Step 1 replaces IDEA-003 Step 4 — implement IDEA-004's version and IDEA-003 is automatically covered. Implementing IDEA-003 first and then IDEA-004 on top is also valid; IDEA-004 Step 1 is the only step that needs merging.
+**Status**: 🔴 Not started — implement only after Phase 3 is visually complete and stable  
+**Effort**: Medium (backend manifest + API endpoints + prompt engineering)  
+**Goal**: Replace filler text and static test image with real data. When a trigger fires for a known subject, the correct image and structured dossier text are loaded from a local manifest. The LLM is optionally instructed to prepend a `[DOSSIER:key]` tag to responses about subjects in the manifest.
 
----
+#### What this phase does
 
-### Design Decisions to Confirm Before Implementing
+- `assets/images/manifest.json` becomes the single source of truth — each entry has a key, display title, image filename, and metadata fields
+- A `backend/rag.py` router exposes `GET /rag/manifest` and `GET /rag/image/{key}`
+- `app.js` loads the manifest on startup and injects the key vocabulary into the system prompt
+- **Subject-to-key resolution**: `_presSubject` captured in Phase 0 is passed to `_resolveManifestKey(subject)` which fuzzy-matches against manifest titles and keys. This is the direct payoff of the Phase 0 regex design — the subject word(s) already arrive cleanly without needing to re-parse the transcript.
+- When a key is resolved, `_populatePresPanel(entry)` fills the image, dossier title, body, and metadata grid from the manifest entry
+- When `[DOSSIER:key]` appears in a streamed LLM response, `triggerPresMode(key)` fires — this is the LLM-initiated path, complementing the voice-initiated path
+- Voice triggers and LLM tags both call the same `_populatePresPanel(entry)` — one code path for both entry points
 
-| Decision | Options | Recommendation |
-|---|---|---|
-| Image panel width in presentation mode | `45%` fixed ratio vs. `50%` vs. fixed px | `45%` — leaves enough column for ring + text at any width |
-| Waveform in presentation mode | Hide, dim, or keep full opacity | Dim to `0.35` — shows audio activity without competing with output text |
-| Revert trigger | Button only, keyword only, or both | Both — button for mouse users, keyword for voice-only sessions |
-| Pres-output font size | Match chat (`13px`) vs. larger (`15px`) | `15px` — more readable at a glance in the open layout |
-| Auto-revert after audio ends | Yes (return to chat when speaking finishes) vs. No | No for v1 — user controls revert; avoids jarring snap-back mid-reading |
+#### Manifest schema
 
----
-
-### Verification Checklist
-
-1. Trigger an image response — confirm ring shifts right, image slides in left, chat fades out, text streams below ring
-2. All transitions should complete within ~0.5 s with no layout jank
-3. Conversation history remains intact — revert to chat and confirm previous messages are visible
-4. Click EXIT button — confirm full revert animation
-5. Say "go back" via mic — confirm revert without LLM round-trip
-6. Clear conversation in presentation mode — confirm both chat and image panel clear, mode exits
-7. Ask a second image-trigger question in presentation mode — confirm image updates without double-entering the mode
-8. Resize browser window to narrow width — confirm `.main-col` doesn't collapse below usable size (set `min-width` guard if needed)
-
----
-
-### Expected Result
-
-| Scenario | Before | After |
-|---|---|---|
-| Topic with a manifest image | Image panel slides in beside chat | Full layout shift — image left, ring+text right, chat hidden |
-| Topic without a manifest image | No change | No change |
-| User says "go back" | N/A (no mode) | Instant revert, no LLM call, chat reappears |
-| User clicks EXIT | N/A | Same revert |
-| Clear conversation | Chat wipes | Chat wipes, presentation mode exits, image clears |
-
----
-
-## IDEA-005 — Mouse Proximity Reactivity (Sphere & Orbs)  [COMPLETED✅]
-
-**Status**: Ready to implement  
-**Effort**: Small (frontend-only, `app.js` / Three.js `animate()` loop)  
-**Impact**: Makes the visual feel alive and aware — the sphere and orbs respond to the user's physical presence on screen, adding personality without affecting any functional state
-
-### Problem
-
-The sphere and orbs are purely reactive to audio/speech state. The mouse cursor moving across the screen has no effect, making the visual feel passive and disconnected from the user outside of voice interactions.
-
-### Solution
-
-Track the cursor position relative to the sphere's canvas centre. Compute a normalised proximity value (`0` = far away, `1` = touching the sphere edge) and drive two separate reaction tiers from it:
-
-- **Proximity tier** — cursor within a configurable radius of the sphere centre: orbs shift toward light red and the sphere surface displacement increases slightly (looks agitated / flinching)
-- **UI hover tier** — cursor hovering over any interactive button or dropdown: a softer, cooler tint (pale blue-white) and a small speed bump, suggesting alertness without alarm
-
-Both tiers blend smoothly via the existing `orbSpeedMult` lerp pattern and new per-orb colour lerp state, and they yield immediately when a real speech state (listening, speaking) takes over.
-
----
-
-### Implementation Plan
-
-#### Step 1 — Track mouse position
-
-Add a global mouse position tracker near the top of `app.js`, after the DOM refs block:
-
-```js
-// Normalised mouse position in viewport pixels (updated on every mousemove)
-let _mouseX = -9999;
-let _mouseY = -9999;
-document.addEventListener('mousemove', e => { _mouseX = e.clientX; _mouseY = e.clientY; });
-document.addEventListener('mouseleave', () => { _mouseX = -9999; _mouseY = -9999; });
+```json
+[
+  {
+    "key": "apollo_13",
+    "title": "APOLLO 13",
+    "file": "apollo_13.jpg",
+    "body": "NASA's seventh crewed Moon mission, launched April 11 1970. An oxygen tank rupture on day two forced the crew to abort the lunar landing and use the Lunar Module as a lifeboat.",
+    "meta": [
+      { "key": "MISSION",  "val": "Apollo 13" },
+      { "key": "DATE",     "val": "11 APR 1970" },
+      { "key": "STATUS",   "val": "ABORTED" },
+      { "key": "CREW",     "val": "Lovell / Swigert / Haise" }
+    ]
+  }
+]
 ```
 
----
-
-#### Step 2 — Compute proximity each frame
-
-Inside `animate()`, after the existing `orbSpeedMult` lerp block, compute the cursor's distance from the sphere's canvas centre each frame:
-
-```js
-// Get canvas centre in viewport coordinates
-const rect   = renderer.domElement.getBoundingClientRect();
-const cxPx   = rect.left + rect.width  * 0.5;
-const cyPx   = rect.top  + rect.height * 0.5;
-
-// Sphere radius in pixels (use the smaller canvas dimension as a proxy)
-const sphereRadiusPx = Math.min(rect.width, rect.height) * 0.5 * 0.55; // 0.55 ≈ visual sphere edge
-
-const distPx = Math.hypot(_mouseX - cxPx, _mouseY - cyPx);
-
-// proximity: 0 when far away, ramps to 1 when cursor touches sphere edge, >1 if inside
-const PROX_RAMP_START = sphereRadiusPx * 2.5;   // starts reacting at 2.5× sphere radius
-const rawProx = 1 - Math.min(1, Math.max(0, (distPx - sphereRadiusPx) / (PROX_RAMP_START - sphereRadiusPx)));
-// Smooth with a lerp so it doesn't snap
-proximityVal += (rawProx - proximityVal) * 0.06;
-```
-
-Declare `let proximityVal = 0;` alongside the other animation state variables at the top of `initSphere()` or at module scope.
-
----
-
-#### Step 3 — Detect UI hover
-
-Add a lightweight hover flag driven by `mouseenter`/`mouseleave` on every interactive element:
-
-```js
-let _uiHovered = false;
-const UI_HOVER_ELS = ['mic-btn', 'send-btn', 'clear-btn', 'tts-toggle', 'voice-select', 'text-input'];
-UI_HOVER_ELS.forEach(id => {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.addEventListener('mouseenter', () => { _uiHovered = true;  });
-  el.addEventListener('mouseleave', () => { _uiHovered = false; });
-});
-```
-
----
-
-#### Step 4 — Blend orb colour per-frame
-
-The current orb colour is a single constant selected by speech state. Replace it with a lerped `THREE.Color` that blends toward the reaction tint when `proximityVal` or `_uiHovered` is active, and yields to speech state colours otherwise.
-
-Declare lerp targets and current colour state alongside `orbDefs`:
-
-```js
-const ORB_COLOR_IDLE     = new THREE.Color(0xffffff);  // white
-const ORB_COLOR_LISTEN   = new THREE.Color(0x88bbff);  // blue
-const ORB_COLOR_SPEAK    = new THREE.Color(0xffdd88);  // warm yellow
-const ORB_COLOR_AGITATED = new THREE.Color(0xff8888);  // light red — proximity alarm
-const ORB_COLOR_AWARE    = new THREE.Color(0xaaccff);  // pale blue — UI hover awareness
-
-// Per-orb lerp colour (initialised to idle white)
-const orbCurrentColors = orbDefs.map(() => new THREE.Color(0xffffff));
-```
-
-Inside `animate()`, after computing `proximityVal`, determine the target colour for this frame:
-
-```js
-let orbColorTarget;
-if (isListening)            orbColorTarget = ORB_COLOR_LISTEN;
-else if (isSpeaking)        orbColorTarget = ORB_COLOR_SPEAK;
-else if (proximityVal > 0.05) orbColorTarget = ORB_COLOR_AGITATED.clone().lerp(ORB_COLOR_IDLE, 1 - proximityVal);
-else if (_uiHovered)        orbColorTarget = ORB_COLOR_AWARE;
-else                        orbColorTarget = ORB_COLOR_IDLE;
-```
-
-Then in the orb update loop, replace the direct `.color.set(hex)` call with a lerp:
-
-```js
-// Replace: orb.light.color.set(isListening ? ORB_BLUE : isSpeaking ? ORB_YELLOW : ORB_WHITE);
-orbCurrentColors[i].lerp(orbColorTarget, 0.04);
-orb.light.color.copy(orbCurrentColors[i]);
-orb.mesh.material.color.copy(orbCurrentColors[i]);
-orb.mesh.material.emissive.copy(orbCurrentColors[i]);
-```
-
----
-
-#### Step 5 — Blend orb speed
-
-The existing `orbSpeedMult` lerp drives speed; extend the target to include proximity:
-
-```js
-// Replace the existing single target line:
-// const targetSpeedMult = isListening ? 1.6 : isSpeaking ? 1.4 : 1.0;
-
-const targetSpeedMult = isListening ? 1.6
-  : isSpeaking        ? 1.4
-  : proximityVal > 0.05 ? 1.0 + proximityVal * 0.8   // up to 1.8× when cursor is on sphere
-  : _uiHovered        ? 1.15                           // mild bump on UI hover
-  : 1.0;
-```
-
----
-
-#### Step 6 — Modulate sphere displacement amplitude
-
-The existing per-vertex audio displacement uses an `analyserData` amplitude. Add a proximity contribution so the sphere surface looks more turbulent when the cursor is close, even in silence:
-
-```js
-// Existing pattern (approximate):
-const audioPush = analyserData ? ... : 0;
-
-// Add after audioPush computation:
-const proximityPush = proximityVal * 0.08;   // max 0.08 units of extra displacement
-// Combine: vertex offset += audioPush + proximityPush  (apply per vertex in the loop)
-```
-
----
-
-### Files Changed
+#### Files changed (Phase 4 only)
 
 | File | Change |
 |---|---|
-| `frontend/app.js` | Mouse tracker; `proximityVal` computation in `animate()`; `_uiHovered` flag; per-orb colour lerp; speed mult extension; vertex displacement extension |
-| `frontend/index.html` | **None** |
-| `frontend/style.css` | **None** |
-| `backend/` | **None** |
+| `assets/images/manifest.json` | Create — full manifest |
+| `backend/rag.py` | Create — `/rag/manifest` and `/rag/image/{key}` |
+| `backend/main.py` | Register RAG router |
+| `frontend/app.js` | Manifest load on init; prompt injection; `_resolveManifestKey(subject)` fuzzy-matcher; `_populatePresPanel(entry)`; `[DOSSIER:key]` stream tag parser; `enterPresMode()` updated to call `_resolveManifestKey(_presSubject)` and populate panel |
+| `frontend/style.css` | **None** — Phase 3 styles are sufficient |
+| `frontend/index.html` | **None** — Phase 3 HTML is sufficient |
 
 ---
 
-### Design Decisions to Confirm Before Implementing
+### Phase summary
 
-| Decision | Options | Recommendation |
+| Phase | What it proves | Backend needed |
 |---|---|---|
-| Proximity ramp start distance | 1.5×, 2×, or 2.5× sphere radius | 2.5× — reaction begins well before the cursor reaches the sphere edge |
-| Agitated colour | Deep red vs. light red vs. orange-red | Light red (`#ff8888`) — alarmed but not angry; matches the soft aesthetic |
-| UI hover colour | Pale blue vs. brighter blue vs. white pulse | Pale blue (`#aaccff`) — softer than the listening blue, clearly distinct from idle |
-| Speed ceiling on proximity | 1.6× (match listen) vs. 1.8× vs. 2× | 1.8× — noticeably faster than idle without being frantic |
-| Sphere displacement on proximity | Yes vs. no | Yes — visual turbulence sells the "agitated" metaphor |
-| Speech state takes priority | Always vs. blend | Always — speech state colours and speeds override proximity entirely |
-
----
-
-### Verification Checklist
-
-1. Move cursor slowly toward the sphere from a distance — confirm orbs fade from white toward light red as distance closes
-2. Move cursor away — confirm smooth fade back to white (not a snap)
-3. Hover over mic button — confirm mild pale-blue tint and slight speed increase
-4. Move off the button — confirm return to idle white
-5. Start speaking (TTS) while cursor is near the sphere — confirm yellow speaking colour takes over immediately
-6. Start listening (mic active) while cursor is near — confirm blue overrides proximity red
-7. Confirm no visible frame-rate impact (no extra `getBoundingClientRect` calls per-vertex — only once per frame at the top of `animate()`)
-
----
-
-### Expected Result
-
-| Scenario | Before | After |
-|---|---|---|
-| Cursor approaches sphere | No reaction | Orbs fade toward light red, orbits quicken, surface ripples |
-| Cursor retreats | No reaction | Smooth return to white idle |
-| Cursor hovers a button/dropdown | No reaction | Pale blue tint, slight speed increase |
-| TTS speaking fires | Yellow orbs | Yellow overrides any proximity tint |
-| Mic listening fires | Blue orbs | Blue overrides any proximity tint |
+| **0 — Black rectangle** | Voice trigger intercept works | No |
+| **1 — Neon border animation** | Animation sequence plays cleanly from triggers | No |
+| **2 — Static image drop** | Image layout and timing work before any API | No |
+| **3 — Full reconfiguration** | Complete visual mode shift is smooth and reversible | No |
+| **4 — RAG population** | Real data populates the confirmed-working visual system | Yes |
 
 ---
