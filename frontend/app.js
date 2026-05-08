@@ -1,5 +1,4 @@
 // ── Config ────────────────────────────────────────────────────────────────────
-const OLLAMA_BASE  = 'http://localhost:11434';
 const BACKEND_BASE = 'http://localhost:8000';
 const MODEL        = localStorage.getItem('starling_model') || 'llama3.2:3b';
 // Build a context block injected at the top of the system prompt on every boot.
@@ -9,7 +8,7 @@ function _buildBootContext() {
   const date  = now.toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   const time  = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
   const tz    = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  return `Current date: ${date}. Current time: ${time} (${tz}). You are running as the model ${MODEL} served via Ollama.`;
+  return `Current date: ${date}. Current time: ${time} (${tz}). You are running as the model ${MODEL} served locally.`;
 }
 
 const SYSTEM_PROMPT =
@@ -31,7 +30,7 @@ const SYSTEM_PROMPT =
   'Your pipeline is fully local and runs on the user\'s own hardware. ' +
   'Audio is captured from the microphone and transcribed to text by faster-whisper (a CTranslate2-accelerated ' +
   'implementation of OpenAI Whisper) running on CUDA. ' +
-  'The transcript is sent to you — a large language model served through Ollama on the same machine. ' +
+  'The transcript is sent to you — a large language model served locally on the same machine. ' +
   'Your text response is synthesised to speech by Kokoro TTS (kokoro-onnx, version 1.0, running via ONNX Runtime) ' +
   'and played back through the user\'s speakers, sentence by sentence as you generate, so they hear you ' +
   'almost as soon as you begin thinking. ' +
@@ -62,7 +61,15 @@ const ttsEngineEl = document.getElementById('tts-engine');
 const ftrTts      = document.getElementById('ftr-tts');
 const ftrWhisperDev = document.getElementById('ftr-whisper-dev');
 const ftrKokoroDev  = document.getElementById('ftr-kokoro-dev');
-const ftrOllamaDev  = document.getElementById('ftr-ollama-dev');
+const ftrLlmDev     = document.getElementById('ftr-llm-dev');
+const ftrLlmAddr    = document.getElementById('ftr-llm-addr');
+
+const lmPrompt  = document.getElementById('lm-prompt');
+const lmGen     = document.getElementById('lm-gen');
+const lmTime    = document.getElementById('lm-time');
+const lmCtx     = document.getElementById('lm-ctx');
+const lmCtxPct  = document.getElementById('lm-ctx-pct');
+const lmCtxFill = document.getElementById('lm-ctx-fill');
 
 // ── Sphere shared state ─────────────────────────────────────────────────────────────
 const sphereStateRef    = { current: 'idle' };
@@ -83,12 +90,49 @@ UI_HOVER_IDS.forEach(id => {
   el.addEventListener('mouseleave', () => { _uiHovered = false; });
 });
 
+// ── LLM metrics ────────────────────────────────────────────────────────────────────
+let _ctxLimit = null;  // fetched from /chat/context-limit at startup (llama backend only)
+
+async function fetchContextLimit() {
+  try {
+    const res = await fetch(`${BACKEND_BASE}/chat/context-limit`);
+    if (!res.ok) return;
+    const { n_ctx } = await res.json();
+    if (n_ctx) _ctxLimit = n_ctx;
+  } catch { /* endpoint absent (Ollama) or server not ready — ignore */ }
+}
+
+function updateLlmMetrics(m) {
+  if (!lmPrompt) return;
+  if (m.prompt_n != null && m.prompt_per_second != null)
+    lmPrompt.textContent = `${m.prompt_n}t  ${Math.round(m.prompt_per_second)}/s`;
+  if (m.predicted_n != null && m.predicted_per_second != null)
+    lmGen.textContent = `${m.predicted_n}t  ${Math.round(m.predicted_per_second)}/s`;
+  if (m.predicted_ms != null)
+    lmTime.textContent = m.predicted_ms < 1000
+      ? `${Math.round(m.predicted_ms)}ms`
+      : `${(m.predicted_ms / 1000).toFixed(1)}s`;
+  const used = m.prompt_tokens;
+  if (used != null) {
+    if (_ctxLimit) {
+      const pct = Math.min(100, Math.round((used / _ctxLimit) * 100));
+      lmCtx.textContent    = `${used} / ${_ctxLimit}`;
+      lmCtxPct.textContent = `${pct}%`;
+      lmCtxFill.style.width = `${pct}%`;
+      lmCtxFill.className = 'lm-ctx-fill' +
+        (pct >= 90 ? ' crit' : pct >= 70 ? ' warn' : '');
+    } else {
+      lmCtx.textContent = `${used} tok`;
+    }
+  }
+}
+
 // ── System status ────────────────────────────────────────────────────────────
 async function fetchSystemStatus() {
   try {
     const res = await fetch(`${BACKEND_BASE}/system-status`);
     if (!res.ok) return;
-    const { whisper, kokoro, ollama } = await res.json();
+    const { whisper, kokoro, llm, llm_url } = await res.json();
     function setDev(el, val) {
       if (!el) return;
       el.textContent = val;
@@ -96,7 +140,8 @@ async function fetchSystemStatus() {
     }
     setDev(ftrWhisperDev, whisper);
     setDev(ftrKokoroDev,  kokoro);
-    setDev(ftrOllamaDev,  ollama);
+    setDev(ftrLlmDev,     llm);
+    if (ftrLlmAddr && llm_url) ftrLlmAddr.textContent = llm_url;
   } catch { /* backend offline — ignore */ }
 }
 
@@ -491,7 +536,9 @@ async function sendToOllama(userText) {
       for (const line of decoder.decode(value, { stream: true }).split('\n')) {
         if (!line.trim()) continue;
         try {
-          const token = JSON.parse(line)?.message?.content ?? '';
+          const parsed = JSON.parse(line);
+          if (parsed?.metrics) { updateLlmMetrics(parsed.metrics); continue; }
+          const token = parsed?.message?.content ?? '';
           if (!token) continue;
           full    += token;
           sentBuf += token;
@@ -887,7 +934,7 @@ document.addEventListener('keyup', e => {
 
 // ── Greeting & model warm-up ─────────────────────────────────────────────────
 const GREETING_TEXT =
-  `All systems nominal. S.T.A.R.L.I.N.G. online — running ${MODEL} on GPU via Ollama. How can I assist?`;
+  `All systems nominal. S.T.A.R.L.I.N.G. online — running ${MODEL} locally on GPU. How can I assist?`;
 
 // Synthesise the greeting to pre-heat Kokoro, then POST the returned WAV to
 // /transcribe so the Whisper CUDA session is initialised before the user ever
@@ -921,5 +968,6 @@ initSphere();
 statModel.textContent = MODEL;
 _applyTtsMode();
 loadVoices();
+fetchContextLimit();
 const { txt: _greetingTxt } = appendMessage('assistant', 'INITIALISING…');
 warmupModels(_greetingTxt);  // async — heats Kokoro + Whisper, then reveals greeting
