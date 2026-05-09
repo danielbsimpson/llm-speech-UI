@@ -26,6 +26,12 @@ Thumbs.db
 .vscode/settings.json
 *.swp
 
+# ChromaDB (generated at runtime)
+**/chroma_db/
+
 # Images and Personal Files
 assets/dossier_descriptions/
 assets/dossier_images/
+
+# Memory databases
+backend/memory/chroma_db/
