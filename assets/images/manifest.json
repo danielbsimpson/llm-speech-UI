@@ -12,5 +12,26 @@
     "image": "Quinn_Minor.jpg",
     "dossier": "quinn_minor",
     "aliases": ["quinn", "quin", "quin minor", "minor"]
+  },
+  {
+    "key": "david_zitney",
+    "title": "David Zitney",
+    "image": "David_Zitney.jpg",
+    "dossier": "david_zitney",
+    "aliases": ["dave", "dave zitney", "zitney", "david", "noddskwodd"]
+  },
+  {
+    "key": "mark_stent",
+    "title": "Mark Stent",
+    "image": "Mark_Stent.jpg",
+    "dossier": "mark_stent",
+    "aliases": ["mark", "stent", "marktronic", "the world's strongest dj", "worlds strongest dj"]
+  },
+  {
+    "key": "danielle_smith",
+    "title": "Danielle Smith",
+    "image": "Danielle_Smith.png",
+    "dossier": "danielle_smith",
+    "aliases": ["danielle", "smith", "dani", "dani smith"]
   }
 ]

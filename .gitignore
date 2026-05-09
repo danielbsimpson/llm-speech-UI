@@ -25,3 +25,7 @@ Thumbs.db
 # Editors
 .vscode/settings.json
 *.swp
+
+# Images and Personal Files
+assets/dossier_descriptions/
+assets/dossier_images/

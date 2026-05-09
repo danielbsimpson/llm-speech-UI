@@ -51,7 +51,10 @@ async def _stream_as_ndjson(payload: dict):
             "POST", f"{LLAMA_BASE}/v1/chat/completions", json=payload
         ) as resp:
             if resp.status_code != 200:
-                raise HTTPException(status_code=resp.status_code, detail="llama-server error")
+                body = await resp.aread()
+                detail = body.decode(errors="replace")[:200]
+                yield json.dumps({"message": {"content": f"[Error: llama-server {resp.status_code} — {detail}]"}, "done": True}) + "\n"
+                return
             async for line in resp.aiter_lines():
                 if not line.startswith("data: "):
                     continue

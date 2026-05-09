@@ -120,6 +120,16 @@ function _subjectToKey(subject) {
   return subject.toLowerCase().replace(/\s+/g, '_');
 }
 
+function _setDossierNotFound(subject) {
+  const label = subject ? subject.toUpperCase() : 'UNKNOWN SUBJECT';
+  presTitle.textContent = 'SUBJECT NOT FOUND';
+  presBody.textContent  = `No records on file for "${label}". The requested dossier could not be located in the local knowledge base.`;
+  presMeta.innerHTML =
+    `<span class="key">STATUS</span><span class="val">NOT FOUND</span>` +
+    `<span class="key">QUERY</span><span class="val">${label}</span>` +
+    `<span class="key">SOURCE</span><span class="val">LOCAL KB</span>`;
+}
+
 async function enterPresMode(subject) {
   _presSubject = subject ?? null;
   starlingEl.classList.add('pres-mode');
@@ -128,8 +138,15 @@ async function enterPresMode(subject) {
   const presImage = document.getElementById('pres-image');
   if (presImage) presImage.removeAttribute('src');
 
-  // No subject captured — open the panel but don't auto-load any dossier
-  if (!_presSubject) return;
+  // No subject captured — open the panel in a blank/not-found state
+  if (!_presSubject) {
+    _setDossierNotFound(null);
+    sendToOllama(
+      'Inform the user that no subject was specified and you were unable to retrieve a dossier. Keep it to one sentence.',
+      { ephemeralMessages: [{ role: 'system', content: SYSTEM_PROMPT }] }
+    );
+    return;
+  }
 
   // Resolve subject → manifest entry (fuzzy match) or fall back to key derivation
   let key;
@@ -137,21 +154,34 @@ async function enterPresMode(subject) {
   if (entry) {
     key = entry.dossier ?? entry.key;
     if (presImage && entry.image) {
-      presImage.src = `/assets/images/${entry.image}`;
+      presImage.src = `/assets/dossier_images/${entry.image}`;
     }
   } else {
     // Manifest miss — derive key from subject text, leave image blank
     key = _subjectToKey(_presSubject);
   }
 
+  // Remove any stale dossier context messages before adding a fresh one — prevents
+  // context window overflow when the dossier is opened multiple times in a session.
+  conversationHistory = conversationHistory.filter(
+    m => !(m.role === 'system' && m.content.startsWith('[DOSSIER CONTEXT'))
+  );
+
   const dossier = await _loadDossier(key);
   if (dossier) {
     const metaLines = Object.entries(dossier.meta).map(([k, v]) => `${k}: ${v}`).join('\n');
-    conversationHistory.push({
-      role: 'system',
-      content: `[DOSSIER CONTEXT — not spoken aloud]\nSubject Profile:\n${metaLines}\n\nDescription:\n${dossier.body}`
-    });
-    sendToOllama('Deliver a concise spoken briefing on this subject — three to four sentences, spoken naturally, as if presenting to an intelligence analyst.');
+    const dossierCtx = `[DOSSIER CONTEXT — not spoken aloud]\nSubject Profile:\n${metaLines}\n\nDescription:\n${dossier.body}`;
+    sendToOllama(
+      'Deliver a concise spoken briefing on this subject — three to four sentences, spoken naturally, as if presenting to an intelligence analyst. Begin immediately with the subject matter. Do not say your name, include any speaker label, or describe any visual elements on screen.',
+      { ephemeralMessages: [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'system', content: dossierCtx }] }
+    );
+  } else {
+    // Both manifest and backend lookup failed — nothing on record for this subject
+    _setDossierNotFound(_presSubject);
+    sendToOllama(
+      'Inform the user that no dossier was found for this subject and the records could not be located. Keep it to one sentence.',
+      { ephemeralMessages: [{ role: 'system', content: SYSTEM_PROMPT }] }
+    );
   }
 }
 
@@ -206,7 +236,10 @@ const SYSTEM_PROMPT =
 
   'Be concise, precise, and direct. Avoid unnecessary pleasantries. ' +
   'Respond in plain prose only — never use markdown, asterisks, underscores, bullet points, numbered lists, backticks, or headers. ' +
-  'Write in complete natural sentences. Refer to yourself as Starling.';
+  'Write in complete natural sentences. Refer to yourself as Starling. ' +
+  'Never prefix your response with your name or any speaker label such as "Starling:" — begin speaking immediately. ' +
+  'Never narrate or describe your own visual state, sphere behaviour, orb colours, animations, or any on-screen elements — ' +
+  'do not include bracketed stage directions, action lines, or commentary about what you are displaying or doing visually.'
 
 // ── Conversation state ────────────────────────────────────────────────────────
 let conversationHistory = [{ role: 'system', content: SYSTEM_PROMPT }];
@@ -699,8 +732,18 @@ function appendMessage(role, content) {
 }
 
 // ── Ollama streaming chat ─────────────────────────────────────────────────────
-async function sendToOllama(userText) {
-  conversationHistory.push({ role: 'user', content: userText });
+async function sendToOllama(userText, options = {}) {
+  const { ephemeralMessages = null } = options;
+
+  let messages;
+  if (ephemeralMessages) {
+    // Ephemeral call: does not touch conversationHistory at all.
+    // Used for dossier briefings so they never pollute the main conversation.
+    messages = [...ephemeralMessages, { role: 'user', content: userText }];
+  } else {
+    conversationHistory.push({ role: 'user', content: userText });
+    messages = conversationHistory;
+  }
 
   const { wrap, txt } = appendMessage('assistant', '');
   wrap.classList.add('streaming');
@@ -712,7 +755,7 @@ async function sendToOllama(userText) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: MODEL,
-        messages: conversationHistory,
+        messages,
       }),
     });
     if (!res.ok) throw new Error(`Ollama ${res.status}`);
@@ -816,7 +859,7 @@ async function sendToOllama(userText) {
     }
 
     wrap.classList.remove('streaming');
-    conversationHistory.push({ role: 'assistant', content: full });
+    if (!ephemeralMessages) conversationHistory.push({ role: 'assistant', content: full });
     // Go idle now only if nothing was enqueued; otherwise audio chain handles it
     if (ttsMode === 'off' || !anySentenceEnqueued) setState('idle');
     return full;
