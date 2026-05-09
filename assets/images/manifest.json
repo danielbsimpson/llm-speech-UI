@@ -1,0 +1,16 @@
+[
+  {
+    "key": "daniel_simpson",
+    "title": "Daniel Simpson",
+    "image": "Daniel_Simpson.jpg",
+    "dossier": "daniel_simpson",
+    "aliases": ["dan simpson", "dan", "daniel"]
+  },
+  {
+    "key": "quinn_minor",
+    "title": "Quinn Minor",
+    "image": "Quinn_Minor.jpg",
+    "dossier": "quinn_minor",
+    "aliases": ["quinn", "quin", "quin minor", "minor"]
+  }
+]

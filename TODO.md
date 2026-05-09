@@ -253,7 +253,7 @@ Remove background/border styling from message containers so text floats freely. 
 
 ---
 
-### Stretch Goal — GraphRAG Knowledge Graph Memory
+### Stretch Goal — GraphRAG Knowledge Graph Memory [HOLD DUE TO SPEED CONCERNS]
 
 Replace flat vector RAG with [Microsoft GraphRAG](https://github.com/microsoft/graphrag): a structured, hierarchical RAG system that builds a knowledge graph from your documents. Unlike baseline RAG (top-k vector similarity), GraphRAG extracts entities and relationships, clusters them into communities using the Leiden algorithm, and generates multi-level summaries — enabling the AI to answer holistic "what is this corpus about?" questions as well as specific entity-level lookups.
 

@@ -1,8 +1,9 @@
+import json
 import os
 import re
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -41,6 +42,38 @@ app.include_router(tts_router)
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+# ── RAG endpoints ─────────────────────────────────────────────────────────────
+
+@app.post("/rag/ingest")
+async def rag_ingest(background_tasks: BackgroundTasks):
+    """Trigger async document ingestion from memory/input/. Returns immediately."""
+    from rag import ingest, INPUT_FOLDER
+    background_tasks.add_task(ingest)
+    return {"status": "ingesting", "folder": INPUT_FOLDER}
+
+
+@app.get("/rag/status")
+async def rag_status():
+    """Return RAG system status: enabled flag, chunk count, collection name."""
+    from rag import get_status
+    return get_status()
+
+
+@app.get("/rag/manifest")
+def rag_manifest():
+    """
+    Serve assets/images/manifest.json as JSON.
+    Falls back to an empty list if the file does not exist.
+    """
+    manifest_path = _ASSETS / "images" / "manifest.json"
+    if not manifest_path.exists():
+        return []
+    try:
+        return json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
 
 
 

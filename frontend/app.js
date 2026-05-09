@@ -3,13 +3,78 @@ const BACKEND_BASE = 'http://localhost:8000';
 const MODEL        = localStorage.getItem('starling_model') || 'llama3.2:3b';
 
 // ── Presentation mode ─────────────────────────────────────────────────────────
-// Matches dossier trigger verbs and optionally captures a subject after "on/for/about/regarding"
-const PRES_TRIGGER_RE = /\b(?:open|show|pull up|display|launch|activate)\b.*?\bdossier\b(?:\s+(?:on|for|about|regarding)\s+(.+))?/i;
+// Matches dossier trigger verbs and optionally captures a subject after "on/for/about/regarding/of"
+const PRES_TRIGGER_RE = /\b(?:open|show|pull up|display|launch|activate)\b.*?\bdossier\b(?:\s+(?:on|for|about|regarding|of)\s+(.+))?/i;
+
+// ── Manifest ──────────────────────────────────────────────────────────────────
+// Loaded once at startup from /rag/manifest. Each entry: { key, title, image, dossier, aliases[] }
+let _manifest = [];
+
+async function _loadManifest() {
+  try {
+    const res = await fetch(`${BACKEND_BASE}/rag/manifest`);
+    if (res.ok) _manifest = await res.json();
+  } catch { /* backend offline — manifest stays empty, fallback via _subjectToKey */ }
+}
+
+/**
+ * Fuzzy-match a free-text subject string against the manifest.
+ * Priority: exact key → exact title → alias → title contains word → key prefix.
+ * Returns the matched manifest entry or null.
+ */
+function _resolveManifest(subject) {
+  if (!subject || !_manifest.length) return null;
+  const q = subject.trim().toLowerCase();
+
+  // 1. Exact key match
+  let entry = _manifest.find(e => e.key === q.replace(/\s+/g, '_'));
+  if (entry) return entry;
+
+  // 2. Exact title match (case-insensitive)
+  entry = _manifest.find(e => e.title.toLowerCase() === q);
+  if (entry) return entry;
+
+  // 3. Alias match
+  entry = _manifest.find(e =>
+    Array.isArray(e.aliases) && e.aliases.some(a => a.toLowerCase() === q)
+  );
+  if (entry) return entry;
+
+  // 4. Subject words all appear in title
+  const words = q.split(/\s+/).filter(Boolean);
+  entry = _manifest.find(e => words.every(w => e.title.toLowerCase().includes(w)));
+  if (entry) return entry;
+
+  // 5. Key starts with first word of subject
+  entry = _manifest.find(e => e.key.startsWith(words[0]));
+  return entry ?? null;
+}
 
 function _parseTrigger(text) {
   const m = text.match(PRES_TRIGGER_RE);
   if (!m) return { matched: false, subject: null };
-  return { matched: true, subject: m[1] ? m[1].trim() : null };
+
+  let subject = m[1] ? m[1].trim() : null;
+
+  // Fallback 1: subject appears BEFORE "dossier"
+  // Handles: "show me Quinn Minor's dossier", "pull up Quinn Minor dossier"
+  if (!subject) {
+    const pre = text.match(/\b(\w+(?:\s+\w+)*?)(?:'s)?\s+dossier\b/i);
+    if (pre) {
+      const skip = /^(?:open|show|pull|up|display|launch|activate|the|a|an|me|his|her|their|this|that)$/i;
+      const words = pre[1].trim().split(/\s+/).filter(w => !skip.test(w));
+      if (words.length) subject = words.join(' ');
+    }
+  }
+
+  // Fallback 2: subject appears AFTER "dossier" with any separator or none
+  // Handles: "show me the dossier of Quinn Minor", "show dossier Quinn Minor"
+  if (!subject) {
+    const post = text.match(/\bdossier\b\s+(?:of\s+|on\s+|for\s+|about\s+|regarding\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i);
+    if (post) subject = post[1].trim();
+  }
+
+  return { matched: true, subject };
 }
 
 function _matchesExitPhrase(text) {
@@ -51,19 +116,37 @@ async function _loadDossier(key) {
 }
 
 function _subjectToKey(subject) {
-  // "Daniel Simpson" → "daniel_simpson"
+  // "Daniel Simpson" → "daniel_simpson" (fallback when manifest is unavailable)
   return subject.toLowerCase().replace(/\s+/g, '_');
 }
 
 async function enterPresMode(subject) {
   _presSubject = subject ?? null;
   starlingEl.classList.add('pres-mode');
-  const key = _presSubject ? _subjectToKey(_presSubject) : 'daniel_simpson';
+
+  // Always clear the image first — avoids src='' resolving to page URL (broken icon)
+  const presImage = document.getElementById('pres-image');
+  if (presImage) presImage.removeAttribute('src');
+
+  // No subject captured — open the panel but don't auto-load any dossier
+  if (!_presSubject) return;
+
+  // Resolve subject → manifest entry (fuzzy match) or fall back to key derivation
+  let key;
+  const entry = _resolveManifest(_presSubject);
+  if (entry) {
+    key = entry.dossier ?? entry.key;
+    if (presImage && entry.image) {
+      presImage.src = `/assets/images/${entry.image}`;
+    }
+  } else {
+    // Manifest miss — derive key from subject text, leave image blank
+    key = _subjectToKey(_presSubject);
+  }
+
   const dossier = await _loadDossier(key);
   if (dossier) {
     const metaLines = Object.entries(dossier.meta).map(([k, v]) => `${k}: ${v}`).join('\n');
-    // Inject dossier as a system context block so the model treats it as grounding data
-    // rather than content to echo. The user turn is then a clean short instruction only.
     conversationHistory.push({
       role: 'system',
       content: `[DOSSIER CONTEXT — not spoken aloud]\nSubject Profile:\n${metaLines}\n\nDescription:\n${dossier.body}`
@@ -655,8 +738,22 @@ async function sendToOllama(userText) {
           if (parsed?.metrics) { updateLlmMetrics(parsed.metrics); continue; }
           const token = parsed?.message?.content ?? '';
           if (!token) continue;
-          full    += token;
-          sentBuf += token;
+
+          // ── [DOSSIER:key] stream tag interception ──────────────────────────
+          // If the LLM emits [DOSSIER:some_key] in its stream, strip the tag
+          // from the visible text and activate the dossier panel.
+          const dossierTagRe = /\[DOSSIER:([a-z0-9_\-]+)\]/g;
+          const strippedToken = token.replace(dossierTagRe, (_, tagKey) => {
+            // Fire async — don't block the token loop
+            if (!starlingEl.classList.contains('pres-mode')) {
+              enterPresMode(tagKey.replace(/_/g, ' '));
+            }
+            return ''; // remove tag from visible text
+          });
+          // ────────────────────────────────────────────────────────────────────
+
+          full    += strippedToken;
+          sentBuf += strippedToken;
 
           // TTS off — display immediately; TTS on — text is revealed sentence-by-sentence on audio start
           if (ttsMode === 'off') {
@@ -1134,5 +1231,6 @@ statModel.textContent = MODEL;
 _applyTtsMode();
 loadVoices();
 fetchContextLimit();
+_loadManifest();  // Phase 4: load subject→image manifest for dynamic dossier images
 const { txt: _greetingTxt } = appendMessage('assistant', 'INITIALISING…');
 warmupModels(_greetingTxt);  // async — heats Kokoro + Whisper, then reveals greeting

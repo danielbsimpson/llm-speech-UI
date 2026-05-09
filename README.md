@@ -22,6 +22,8 @@ Microphone → Speech-to-Text → llama-server (LLM on GPU) → Text-to-Speech �
 - ⚡ **Model warm-up on load** — Kokoro and Whisper CUDA sessions are pre-heated at startup; UI shows `INITIALISING…` and GPU badges populate before the user speaks
 - 📊 **LLM metrics bar** — live prompt tokens, generation speed (t/s), total time, and context window fill percentage after every response
 - 🔒 **Fully local** — no data leaves your machine
+- 🗄️ **RAG memory system** — ChromaDB + BM25/vector fusion retrieval; drop `.md` or `.txt` files into `memory/input/` and the model answers with grounded context; gated by `RAG_ENABLED=true` in `.env`
+- 🖼️ **Dynamic dossier panel** — voice-triggered presentation mode loads subject images and structured profiles from a local manifest; new subjects added by dropping files in `assets/`
 
 ---
 
@@ -54,7 +56,7 @@ Model files are read directly from the GGUF format. The easiest source is your e
 | `gemma3:4b` | 3.3 GB | Lightweight, good for low VRAM |
 | `llama3.2:3b` | 2.0 GB | **Default** — fastest response times |
 | `phi4-mini` | 2.5 GB | Microsoft, strong reasoning for its size |
-| `nomic-embed-text` | 274 MB | Embedding model (for future RAG) |
+| `nomic-embed-text` | 274 MB | Embedding model — no longer required; RAG uses fastembed in-process |
 
 These are available as Ollama blobs at `%USERPROFILE%\.ollama\models\blobs\`. Point `start_llama_server.bat` at the relevant blob path or copy and rename to a `models/` directory.
 
@@ -73,7 +75,14 @@ llm-speech-UI/
 │   ├── stt.py              # Speech-to-text via faster-whisper
 │   ├── tts.py              # Text-to-speech via Kokoro
 │   ├── llama_server.py     # llama-server streaming relay (DEFAULT, LLM_BACKEND=llama)
-│   └── ollama.py           # Ollama streaming relay (fallback, LLM_BACKEND=ollama)
+│   ├── ollama.py           # Ollama streaming relay (fallback, LLM_BACKEND=ollama)
+│   └── rag.py              # RAG module — ingest, retrieve, format, status
+├── memory/
+│   └── input/              # Drop .md / .txt files here; run 'make rag-ingest' to index
+├── assets/
+│   ├── images/
+│   │   └── manifest.json   # Subject → image / dossier mapping for presentation mode
+│   └── dossier_descriptions/  # Structured subject profiles (parsed by /dossier/{key})
 ├── scripts/
 │   ├── setup.sh            # One-shot install script
 │   └── start_llama_server.bat  # Launch llama-server on Windows (CUDA)
@@ -173,9 +182,11 @@ Leave this terminal running.
 
 ---
 
+---
+
 ### Step 2 — Start the Backend + UI (Terminal 2)
 
-Open a **second** PowerShell terminal in the repository root and run:
+Open a **new** PowerShell terminal in the repository root and run:
 
 ```powershell
 .venv\Scripts\activate
@@ -190,6 +201,27 @@ Application startup complete.
 ```
 
 Leave this terminal running.
+
+---
+
+### Step 2b — Activate RAG (optional, first time only)
+
+If you have set `RAG_ENABLED=true` in `.env`, index your documents after the backend is running:
+
+```powershell
+make rag-ingest
+# or: curl -X POST http://localhost:8000/rag/ingest
+```
+
+On first run, fastembed will download the embedding model (~33 MB) from HuggingFace and cache it locally. No Ollama or extra server required.
+
+Verify indexing:
+
+```powershell
+make rag-status
+```
+
+You should see `chunk_count > 0`. Add `.md` or `.txt` files to `memory/input/` and re-run `rag-ingest` to expand the knowledge base.
 
 ---
 
@@ -239,6 +271,15 @@ WHISPER_DEVICE=cuda       # set to cpu if CUDA unavailable
 
 # TTS — Kokoro ONNX
 ONNX_PROVIDER=CUDAExecutionProvider   # or DmlExecutionProvider / CPUExecutionProvider
+
+# RAG / memory system (Phase 4)
+RAG_ENABLED=false              # set to true to activate retrieval-augmented generation
+RAG_INPUT_FOLDER=memory/input  # drop .md/.txt docs here for ingestion
+RAG_CHROMA_PATH=memory/chroma_db
+RAG_EMBED_MODEL=BAAI/bge-small-en-v1.5  # fastembed model ID — downloads ~33 MB on first use
+RAG_CHUNK_SIZE=200
+RAG_TOP_K=4                    # chunks retrieved per query (voice mode uses RAG_VOICE_TOP_K=2)
+RAG_MAX_CONTEXT_TOKENS=400
 ```
 
 ---
@@ -275,6 +316,10 @@ To use Whisper, set `STT_ENGINE=whisper` in `.env` and ensure the FastAPI backen
 | `/synthesize/voices` | GET | List available Kokoro voices |
 | `/health` | GET | Check backend status |
 | `/system-status` | GET | Per-model device report (GPU/CPU/IDLE/OFFLINE) + active backend info |
+| `/rag/ingest` | POST | Index documents in `memory/input/` (runs as a background task) |
+| `/rag/status` | GET | Returns `{enabled, chunk_count, collection, embed_model}` |
+| `/rag/manifest` | GET | Returns the subject manifest from `assets/images/manifest.json` |
+| `/dossier/{key}` | GET | Parses `assets/dossier_descriptions/{key}.md` → `{title, body, meta}` |
 
 ### Example: stream a chat response
 
@@ -326,7 +371,7 @@ High-level milestones:
 - [ ] Sentence-chunked TTS latency further tuning
 - [ ] Tool use / function calling
 - [ ] Electron desktop app packaging
-- [ ] Local RAG / GraphRAG over a documents folder
+- [x] **RAG memory system** — ChromaDB + BM25/vector RRF fusion + RSE-lite context expansion; voice-triggered dossier panel with dynamic images and structured subject profiles
 
 ---
 

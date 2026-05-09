@@ -68,3 +68,17 @@ test:
 lint:
 	$(PIP) install --quiet ruff
 	$(PYTHON) -m ruff check backend/
+
+# ── RAG / memory ──────────────────────────────────────────────────────────────
+.PHONY: rag-ingest rag-status rag-clear
+
+rag-ingest:
+	@echo "Ingesting documents from memory/input/ ..."
+	cd backend && $(PYTHON) -c "from rag import ingest; r = ingest(); print(r)"
+
+rag-status:
+	curl -s http://localhost:8000/rag/status | $(PYTHON) -m json.tool
+
+rag-clear:
+	rm -rf memory/chroma_db
+	@echo "ChromaDB cleared. Run 'make rag-ingest' to rebuild."

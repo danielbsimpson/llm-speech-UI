@@ -118,6 +118,31 @@ async def chat(req: ChatRequest):
     messages = [m.model_dump() for m in req.messages]
     if not messages or messages[0].get("role") != "system":
         messages.insert(0, {"role": "system", "content": SYSTEM_PROMPT})
+
+    # ── RAG context injection ────────────────────────────────────────────────
+    # When RAG_ENABLED=true, retrieve relevant chunks for the latest user message
+    # and prepend them as a system message before the conversation history.
+    # Uses voice-mode TOP_K (smaller) to stay within the < 100 ms latency budget.
+    try:
+        from rag import RAG_ENABLED, retrieve, format_context_for_llm
+        if RAG_ENABLED:
+            # Find the last user message to use as the retrieval query
+            last_user = next(
+                (m["content"] for m in reversed(messages) if m["role"] == "user"),
+                None,
+            )
+            if last_user:
+                rag_k     = int(os.getenv("RAG_VOICE_TOP_K", "2"))
+                max_toks  = int(os.getenv("RAG_MAX_CONTEXT_TOKENS", "400"))
+                results   = retrieve(last_user, k=rag_k)
+                ctx_block = format_context_for_llm(results, max_tokens=max_toks)
+                if ctx_block:
+                    # Insert immediately after the system prompt (index 1)
+                    messages.insert(1, {"role": "system", "content": ctx_block})
+    except Exception:
+        pass  # RAG failure must never break the main chat path
+    # ── end RAG injection ────────────────────────────────────────────────────
+
     payload = {
         "model":       req.model,
         "messages":    messages,
