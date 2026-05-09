@@ -8,10 +8,6 @@ Microphone → Speech-to-Text → llama-server (LLM on GPU) → Text-to-Speech �
 
 ![S.T.A.R.L.I.N.G. UI](assets/images/Starling_UI_example.png)
 
-**Presentation / dossier mode:**
-
-![S.T.A.R.L.I.N.G. Presentation Mode](assets/images/presentation_mode_example.png)
-
 ---
 
 ## Features
@@ -28,6 +24,10 @@ Microphone → Speech-to-Text → llama-server (LLM on GPU) → Text-to-Speech �
 - 🔒 **Fully local** — no data leaves your machine
 - 🗄️ **RAG memory system** — ChromaDB + BM25/vector fusion retrieval; drop `.md` or `.txt` files into `memory/input/` and run `make rag-ingest` to index them. On every query, relevant chunks are retrieved and injected into the LLM context window as a grounding system message — the model answers with factual, source-grounded responses rather than relying on its training data alone. Gated by `RAG_ENABLED=true` in `.env`; has no effect on latency when disabled.
 - 🖼️ **Dynamic dossier / presentation mode** — say `"pull up the dossier on [name]"` to trigger a full UI reconfiguration: the sphere shifts up-left, the chat window repositions below it, a neon-bordered image panel slides in from centre, and a structured subject profile panel fades in from the right. Subject images are loaded from `assets/dossier_images/` and profiles are parsed from `assets/dossier_descriptions/`. The matched profile is injected into the LLM context as a system message and Starling automatically delivers a spoken briefing — the model speaks about the subject while the dossier is visible on screen. Dossier calls are ephemeral and never pollute the main conversation history. New subjects are added by dropping an image into `assets/dossier_images/`, a `.md` profile into `assets/dossier_descriptions/`, and an entry into `assets/images/manifest.json`.
+
+**Presentation / dossier mode:**
+
+![S.T.A.R.L.I.N.G. Presentation Mode](assets/images/presentation_mode_example.png)
 
 ---
 
