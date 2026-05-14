@@ -34,9 +34,12 @@ if LLM_BACKEND == "llama":
 else:
     from ollama import router as llm_router
 
+from weather import router as weather_router
+
 app.include_router(stt_router)
 app.include_router(llm_router)
 app.include_router(tts_router)
+app.include_router(weather_router)
 
 
 @app.get("/health")

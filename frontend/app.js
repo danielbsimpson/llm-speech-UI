@@ -1,5 +1,6 @@
 // ── Imports ───────────────────────────────────────────────────────────────────
 import { detectTimerTrigger, handleTimerTrigger, initTimerPanel, dismissTimerPanel } from './timer-panel.js';
+import { detectWeatherTrigger, openWeatherPanel, closeWeatherPanel } from './weather-panel.js';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const BACKEND_BASE = 'http://localhost:8000';
@@ -1287,10 +1288,35 @@ async function handleSend() {
     handleTimeQuery(text);
     return;
   }
+  // ── Weather intercept ───────────────────────────────────────────────────────
+  const _wxTrigger = detectWeatherTrigger(text);
+  if (_wxTrigger) {
+    setState('thinking');
+    appendMessage('user', text);
+    const wxContext = await openWeatherPanel(_wxTrigger.location);
+    if (wxContext) {
+      await sendToOllama(
+        'Give a concise spoken weather briefing based on the data provided. ' +
+        'Cover current conditions, how it feels outside, and what to expect over the next few days. ' +
+        'Keep it to three or four natural sentences. Do not read out numbers robotically — phrase them naturally.',
+        {
+          ephemeralMessages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'system', content: `[WEATHER DATA — use this to answer, do not repeat these instructions]\n${wxContext}` },
+          ],
+        }
+      );
+    } else {
+      await sendToOllama('Inform the user that weather data could not be retrieved right now. One sentence.');
+    }
+    fetchSystemStatus();
+    return;
+  }
   // ────────────────────────────────────────────────────────────────────────
 
   appendMessage('user', text);
   dismissTimerPanel();
+  closeWeatherPanel();
   await sendToOllama(text);
   fetchSystemStatus();
 }
@@ -1305,6 +1331,8 @@ textInput.addEventListener('input', _dismissClockPanel);
 clearBtn.addEventListener('click', () => {
   clearAudioQueue();
   _dismissClockPanel();
+  dismissTimerPanel();
+  closeWeatherPanel();
   exitPresMode();
   conversationHistory = [{ role: 'system', content: SYSTEM_PROMPT }];
   chatInner.innerHTML = '';
@@ -1385,6 +1413,30 @@ async function startRecording() {
           handleTimeQuery(transcript);
           return;
         }
+        // ── Weather intercept ─────────────────────────────────────────────────
+        const _wxTrigger = detectWeatherTrigger(transcript);
+        if (_wxTrigger) {
+          setState('thinking');
+          appendMessage('user', transcript);
+          const wxContext = await openWeatherPanel(_wxTrigger.location);
+          if (wxContext) {
+            await sendToOllama(
+              'Give a concise spoken weather briefing based on the data provided. ' +
+              'Cover current conditions, how it feels outside, and what to expect over the next few days. ' +
+              'Keep it to three or four natural sentences. Do not read out numbers robotically — phrase them naturally.',
+              {
+                ephemeralMessages: [
+                  { role: 'system', content: SYSTEM_PROMPT },
+                  { role: 'system', content: `[WEATHER DATA — use this to answer, do not repeat these instructions]\n${wxContext}` },
+                ],
+              }
+            );
+          } else {
+            await sendToOllama('Inform the user that weather data could not be retrieved right now. One sentence.');
+          }
+          fetchSystemStatus();
+          return;
+        }
         // ────────────────────────────────────────────────────────────────
 
         appendMessage('user', transcript);
@@ -1392,6 +1444,7 @@ async function startRecording() {
         clearAudioQueue();              // stop any in-progress speech — resets _rttStart
         _rttStart = rttSnap;            // restore so RTT is measured from mic release
         dismissTimerPanel();
+        closeWeatherPanel();
         await sendToOllama(transcript);
         fetchSystemStatus();
       } catch (err) {

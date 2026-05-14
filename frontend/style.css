@@ -930,3 +930,152 @@ html, body {
 .timer-cancel-btn:hover {
   color: #ff8888;
 }
+
+/* ── Weather Panel ──────────────────────────────────────────────────────────── */
+
+.weather-panel {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 18px 20px 14px;
+  margin-top: 12px;
+  animation: weatherFadeIn 0.35s ease;
+  overflow: hidden;
+}
+
+.weather-panel.hidden {
+  display: none;
+}
+
+@keyframes weatherFadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.weather-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: 8px;
+}
+
+.weather-location {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: clamp(0.8rem, 1.5vw, 1rem);
+  letter-spacing: 0.12em;
+  color: #e0e0e0;
+  text-transform: uppercase;
+}
+
+.weather-fetched {
+  font-size: 0.65rem;
+  color: #555;
+  letter-spacing: 0.08em;
+}
+
+.weather-current {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.weather-temp {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: clamp(2rem, 5vw, 3.2rem);
+  color: #ffffff;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.weather-condition {
+  font-size: clamp(0.7rem, 1.3vw, 0.9rem);
+  color: #aaa;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.weather-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, auto 1fr);
+  column-gap: 16px;
+  row-gap: 5px;
+  margin-top: 8px;
+}
+
+.wd-lbl {
+  font-size: 0.6rem;
+  color: #555;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  align-self: center;
+}
+
+.wd-val {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.75rem;
+  color: #ccc;
+}
+
+/* 7-day forecast strip */
+.weather-forecast {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+}
+
+.weather-forecast::-webkit-scrollbar { display: none; }
+
+.forecast-day {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 7px;
+  min-width: 64px;
+}
+
+.forecast-day-name {
+  font-size: 0.6rem;
+  color: #666;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.forecast-day-icon {
+  font-size: 1.3rem;
+  line-height: 1;
+}
+
+.forecast-day-high {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.8rem;
+  color: #e0e0e0;
+}
+
+.forecast-day-low {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.7rem;
+  color: #555;
+}
+
+.forecast-day-cond {
+  font-size: 0.55rem;
+  color: #666;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  max-width: 60px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

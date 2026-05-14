@@ -72,6 +72,28 @@
             </div>
             <div class="timer-list" id="timer-list"></div>
           </div>
+          <!-- Weather Panel — hidden until a weather query is made -->
+          <div class="weather-panel hidden" id="weather-panel">
+            <div class="weather-header">
+              <div class="weather-location" id="weather-location">—</div>
+              <div class="weather-fetched" id="weather-fetched">—</div>
+            </div>
+            <!-- Current conditions -->
+            <div class="weather-current" id="weather-current">
+              <div class="weather-temp" id="weather-temp">—</div>
+              <div class="weather-condition" id="weather-condition">—</div>
+              <div class="weather-detail-grid">
+                <span class="wd-lbl">FEELS LIKE</span><span class="wd-val" id="weather-feels">—</span>
+                <span class="wd-lbl">HUMIDITY</span><span class="wd-val" id="weather-humidity">—</span>
+                <span class="wd-lbl">WIND</span><span class="wd-val" id="weather-wind">—</span>
+                <span class="wd-lbl">CLOUD COVER</span><span class="wd-val" id="weather-cloud">—</span>
+                <span class="wd-lbl">SUNRISE</span><span class="wd-val" id="weather-sunrise">—</span>
+                <span class="wd-lbl">SUNSET</span><span class="wd-val" id="weather-sunset">—</span>
+              </div>
+            </div>
+            <!-- 7-day forecast strip -->
+            <div class="weather-forecast" id="weather-forecast"></div>
+          </div>
           <div class="chat-inner" id="chat-inner"></div>
         </div>
       </div>
@@ -152,6 +174,7 @@
       <div class="ftr-item">LLM <span id="ftr-llm-addr">—</span><span class="ftr-dev" id="ftr-llm-dev">—</span></div>
       <div class="ftr-item">STT <span>Whisper (local)</span><span class="ftr-dev" id="ftr-whisper-dev">—</span></div>
       <div class="ftr-item">TTS <span id="ftr-tts">Kokoro (local)</span><span class="ftr-dev" id="ftr-kokoro-dev">—</span></div>
+      <div class="ftr-item">WX <span id="ftr-wx-location">—</span></div>
       <div class="ftr-item">SPACE <span>push-to-talk</span></div>
     </footer>
 

@@ -344,9 +344,9 @@ RAG_MAX_CONTEXT_TOKENS=400
 
 # ── Phase 11 tools (add as each tool is implemented) ──────────────────────────
 # Weather (Tool 3)
-# WEATHER_LAT=40.7128
-# WEATHER_LON=-74.0060
-# WEATHER_UNITS=fahrenheit
+WEATHER_LOCATION=Framingham,Massachusetts
+WEATHER_UNITS=fahrenheit
+WEATHER_CACHE_SECONDS=600
 
 # News (Tool 4)
 # NEWS_FEEDS=https://feeds.bbci.co.uk/news/rss.xml,https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml
