@@ -1,6 +1,6 @@
-# Speech to text Local AI Interface
+# S.T.A.R.L.I.N.G. — Speech‑Triggered Autonomous Reasoning & Local Intelligence Node Generator
 
-A voice-driven, S.T.A.R.L.I.N.G. (Speech‑Triggered Autonomous Reasoning & Local Intelligence Node Generator) web interface powered entirely by a local LLM running on your GPU. No cloud APIs. No subscriptions. No Ollama wrapper. Just your hardware.
+A voice-driven AI interface powered entirely by a local LLM running on your GPU. No cloud APIs. No subscriptions. No Ollama wrapper. Just your hardware.
 
 ```
 Microphone → Speech-to-Text → llama-server (LLM on GPU) → Text-to-Speech → Browser UI
@@ -14,7 +14,7 @@ Microphone → Speech-to-Text → llama-server (LLM on GPU) → Text-to-Speech �
 
 - 🎙 **Voice input** via browser MediaRecorder API → local faster-whisper (Whisper)
 - 🧠 **Local LLM inference** directly via llama-server (llama.cpp) — no Ollama wrapper; Ollama kept as a switchable fallback
-- ⚡ **Sub-3-second end-to-end latency** — typical voice → LLM → first TTS audio in under 3 s; dossier retrieval and full presentation mode transition under 4 s; all three pipelines (Whisper, Kokoro, llama-server) run on GPU
+- ⚡ **Sub-3-second end-to-end latency** — typical voice → LLM → first TTS audio in under 3 s; all three pipelines (Whisper, Kokoro, llama-server) run on GPU
 - 🔊 **Text-to-speech** via Kokoro TTS (local, GPU-accelerated) or browser SpeechSynthesis
 - 📡 **Sentence-chunked streaming** — each sentence is synthesised and played as it arrives
 - 💬 **Multi-turn conversation** with persistent context
@@ -22,12 +22,39 @@ Microphone → Speech-to-Text → llama-server (LLM on GPU) → Text-to-Speech �
 - ⚡ **Model warm-up on load** — Kokoro and Whisper CUDA sessions are pre-heated at startup; UI shows `INITIALISING…` and GPU badges populate before the user speaks
 - 📊 **LLM metrics bar** — live prompt tokens, generation speed (t/s), total time, and context window fill percentage after every response
 - 🔒 **Fully local** — no data leaves your machine
-- 🗄️ **RAG memory system** — ChromaDB + BM25/vector fusion retrieval; drop `.md` or `.txt` files into `memory/input/` and run `make rag-ingest` to index them. On every query, relevant chunks are retrieved and injected into the LLM context window as a grounding system message — the model answers with factual, source-grounded responses rather than relying on its training data alone. Gated by `RAG_ENABLED=true` in `.env`; has no effect on latency when disabled.
-- 🖼️ **Dynamic dossier / presentation mode** — say `"pull up the dossier on [name]"` to trigger a full UI reconfiguration: the sphere shifts up-left, the chat window repositions below it, a neon-bordered image panel slides in from centre, and a structured subject profile panel fades in from the right. Subject images are loaded from `assets/dossier_images/` and profiles are parsed from `assets/dossier_descriptions/`. The matched profile is injected into the LLM context as a system message and Starling automatically delivers a spoken briefing — the model speaks about the subject while the dossier is visible on screen. Dossier calls are ephemeral and never pollute the main conversation history. New subjects are added by dropping an image into `assets/dossier_images/`, a `.md` profile into `assets/dossier_descriptions/`, and an entry into `assets/images/manifest.json`.
+- 🗄️ **RAG memory system** — ChromaDB + BM25/vector fusion retrieval; drop `.md` or `.txt` files into `memory/input/` and run `make rag-ingest` to index them
+- 🖼️ **Dynamic dossier / presentation mode** — say `"pull up the dossier on [name]"` to trigger a full UI reconfiguration with image panel, structured subject profile, and automatic LLM spoken briefing
 
 **Presentation / dossier mode:**
 
 ![S.T.A.R.L.I.N.G. Presentation Mode](assets/images/presentation_mode_example.png)
+
+---
+
+## Planned Tool Kit (Phase 11)
+
+A suite of voice-activated tools is planned as the next major phase. Each tool is a
+self-contained intercept added before the LLM pipeline — none break existing functionality.
+Full implementation guides live in the [`markdown/`](./markdown/) folder.
+
+| # | Tool | Guide | Backend | Status |
+|---|---|---|---|---|
+| 1 | Time & Date | [`markdown/TIME.md`](./markdown/TIME.md) | None | 🔲 Planned |
+| 2 | Timers | [`markdown/TIMER.md`](./markdown/TIMER.md) | None | 🔲 Planned |
+| 3 | Weather | [`markdown/WEATHER.md`](./markdown/WEATHER.md) | Open-Meteo (free, no key) | 🔲 Planned |
+| 4 | News Briefing | [`markdown/NEWS.md`](./markdown/NEWS.md) | RSS / feedparser (free) | 🔲 Planned |
+| 5 | Stocks & Crypto | [`markdown/STOCKS.md`](./markdown/STOCKS.md) | yfinance (unofficial) | 🔲 Planned |
+| 6 | Wake Word & Interrupt | [`markdown/WAKE_WORD.md`](./markdown/WAKE_WORD.md) | None | 🔲 Planned |
+| 7 | In-UI Browser Panel | [`markdown/WEBCALL.md`](./markdown/WEBCALL.md) | None | 🔲 Planned |
+| 8 | Ideas Tracker | [`markdown/IDEAS_TRACKER.md`](./markdown/IDEAS_TRACKER.md) | Local JSON file | 🔲 Planned |
+| 9 | Voice Journal | [`markdown/JOURNAL.md`](./markdown/JOURNAL.md) | Local JSON files | 🔲 Planned |
+| 10 | Wikipedia RAG | [`markdown/WIKIPEDIA.md`](./markdown/WIKIPEDIA.md) | FAISS + embeddings | 🔲 Planned |
+| 11 | Google Calendar | [`markdown/CALENDAR.md`](./markdown/CALENDAR.md) | Google Calendar API (OAuth2) | 🔲 Planned |
+| 12 | Gmail | [`markdown/GMAIL.md`](./markdown/GMAIL.md) | Gmail API (OAuth2) | 🔲 Planned |
+
+Tools are ordered from lowest to highest risk of disrupting the current pipeline. See
+[`TODO.md — Phase 11`](./markdown/TODO.md) for the full implementation checklist and intercept
+ordering reference.
 
 ---
 
@@ -70,11 +97,11 @@ These are available as Ollama blobs at `%USERPROFILE%\.ollama\models\blobs\`. Po
 
 ```
 llm-speech-UI/
-├── frontend/           # UI — HTML/CSS/JS (or React + Vite)
+├── frontend/               # UI — HTML/CSS/JS + Three.js
 │   ├── index.html
 │   ├── style.css
 │   └── app.js
-├── backend/            # FastAPI server
+├── backend/                # FastAPI server
 │   ├── main.py
 │   ├── stt.py              # Speech-to-text via faster-whisper
 │   ├── tts.py              # Text-to-speech via Kokoro
@@ -85,15 +112,32 @@ llm-speech-UI/
 │   └── input/              # Drop .md / .txt files here; run 'make rag-ingest' to index
 ├── assets/
 │   ├── images/
-│   │   └── manifest.json       # Subject → image / dossier mapping for presentation mode
-│   ├── dossier_images/         # Subject portrait images (served at /assets/dossier_images/)
-│   └── dossier_descriptions/   # Structured subject profiles (parsed by /dossier/{key})
+│   │   └── manifest.json           # Subject → image / dossier mapping for presentation mode
+│   ├── dossier_images/             # Subject portrait images
+│   └── dossier_descriptions/       # Structured subject profiles (.md files)
+├── markdown/               # Implementation guides for planned and completed features
+│   ├── TODO.md             # Full phased build checklist (Phases 1–11)
+│   ├── TIME.md             # Tool: time & date queries
+│   ├── TIMER.md            # Tool: voice-activated timers
+│   ├── WEATHER.md          # Tool: weather forecast panel
+│   ├── NEWS.md             # Tool: news briefing panel
+│   ├── STOCKS.md           # Tool: stocks & crypto panel
+│   ├── WAKE_WORD.md        # Tool: wake word ("Hey Starling") + interrupt
+│   ├── WEBCALL.md          # Tool: in-UI browser panel
+│   ├── IDEAS_TRACKER.md    # Tool: voice ideas capture & review
+│   ├── JOURNAL.md          # Tool: multi-turn voice journal
+│   ├── WIKIPEDIA.md        # Tool: Wikipedia RAG Q&A
+│   ├── CALENDAR.md         # Tool: Google Calendar integration
+│   ├── GMAIL.md            # Tool: Gmail inbox & summarisation
+│   └── complete/           # Guides for already-implemented features
+│       ├── IDEAS.md        # (general improvement brainstorm log)
+│       └── RAG_IMPLEMENTATION.md
 ├── scripts/
-│   ├── setup.sh            # One-shot install script
+│   ├── setup.sh                # One-shot install script
+│   ├── download_models.py      # Download Kokoro model files
 │   └── start_llama_server.bat  # Launch llama-server on Windows (CUDA)
-├── .env.example        # Environment variable template
-├── requirements.txt    # Python dependencies
-├── TODO.md             # Project build checklist
+├── .env.example            # Environment variable template
+├── requirements.txt        # Python dependencies
 └── README.md
 ```
 
@@ -156,6 +200,18 @@ uvicorn main:app --reload --port 8000
 # Open the frontend
 start http://localhost:8000
 ```
+
+### Adding a Phase 11 tool
+
+Each tool in the planned toolkit follows the same pattern. To add, say, Weather:
+
+1. Install the required Python package: `pip install httpx`
+2. Create `backend/weather.py` and register its router in `backend/main.py`
+3. Create `frontend/weather-panel.js` and add the intercept block to `app.js`
+4. Add the panel HTML and CSS to `index.html` / `style.css`
+
+See [`markdown/WEATHER.md`](./markdown/WEATHER.md) for the full step-by-step guide.
+Every other tool has its own equivalent guide in `markdown/`.
 
 ---
 
@@ -277,14 +333,49 @@ WHISPER_DEVICE=cuda       # set to cpu if CUDA unavailable
 # TTS — Kokoro ONNX
 ONNX_PROVIDER=CUDAExecutionProvider   # or DmlExecutionProvider / CPUExecutionProvider
 
-# RAG / memory system (Phase 4)
+# RAG / memory system
 RAG_ENABLED=false              # set to true to activate retrieval-augmented generation
 RAG_INPUT_FOLDER=memory/input  # drop .md/.txt docs here for ingestion
 RAG_CHROMA_PATH=memory/chroma_db
-RAG_EMBED_MODEL=BAAI/bge-small-en-v1.5  # fastembed model ID — downloads ~33 MB on first use
+RAG_EMBED_MODEL=BAAI/bge-small-en-v1.5
 RAG_CHUNK_SIZE=200
-RAG_TOP_K=4                    # chunks retrieved per query (voice mode uses RAG_VOICE_TOP_K=2)
+RAG_TOP_K=4
 RAG_MAX_CONTEXT_TOKENS=400
+
+# ── Phase 11 tools (add as each tool is implemented) ──────────────────────────
+# Weather (Tool 3)
+# WEATHER_LAT=40.7128
+# WEATHER_LON=-74.0060
+# WEATHER_UNITS=fahrenheit
+
+# News (Tool 4)
+# NEWS_FEEDS=https://feeds.bbci.co.uk/news/rss.xml,https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml
+# NEWS_MAX_ITEMS=10
+# NEWS_CACHE_SECONDS=120
+
+# Stocks (Tool 5)
+# STOCKS_TICKERS=AAPL,MSFT,NVDA,BTC-USD,ETH-USD
+# STOCKS_CACHE_SECONDS=300
+
+# Ideas Tracker (Tool 8)
+# IDEAS_FILE=memory/ideas.json
+# IDEAS_MAX_RETURN=100
+
+# Journal (Tool 9)
+# JOURNAL_DIR=memory/journal
+# JOURNAL_MAX_ENTRIES=500
+
+# Gmail (Tool 12)
+# GMAIL_CREDENTIALS_FILE=credentials/google_gmail_credentials.json
+# GMAIL_TOKEN_FILE=credentials/google_gmail_token.json
+# GMAIL_MAX_UNREAD=20
+# GMAIL_CACHE_SECONDS=120
+
+# Calendar (Tool 11)
+# CALENDAR_BACKEND=google
+# GOOGLE_CREDENTIALS_FILE=credentials/google_calendar_credentials.json
+# GOOGLE_TOKEN_FILE=credentials/google_token.json
+# CALENDAR_TIMEZONE=America/New_York
 ```
 
 ---
@@ -326,6 +417,29 @@ To use Whisper, set `STT_ENGINE=whisper` in `.env` and ensure the FastAPI backen
 | `/rag/manifest` | GET | Returns the subject manifest from `assets/images/manifest.json` |
 | `/dossier/{key}` | GET | Parses `assets/dossier_descriptions/{key}.md` → `{title, body, meta}` |
 
+**Phase 11 endpoints** (added as each tool is implemented):
+
+| Endpoint | Method | Tool |
+|---|---|---|
+| `/weather` | GET | Weather forecast (Open-Meteo) |
+| `/news` | GET | News headlines (RSS) |
+| `/stocks` | GET | Stock / crypto quotes (yfinance) |
+| `/ideas/add` | POST | Save a new idea |
+| `/ideas` | GET / DELETE | List or clear all ideas |
+| `/ideas/{id}` | DELETE | Delete one idea by id |
+| `/ideas/search` | GET | Full-text search across ideas |
+| `/journal/save` | POST | Save a journal entry |
+| `/journal/entries` | GET | List journal entries |
+| `/journal/search` | GET | Search journal entries |
+| `/journal/entry/{id}` | DELETE | Delete a journal entry |
+| `/wiki/search` | POST | Wikipedia RAG — fetch and index article |
+| `/wiki/chat` | POST | Wikipedia RAG — guardrailed Q&A session |
+| `/calendar/today` | GET | Today's Google Calendar events |
+| `/calendar/week` | GET | 7-day Google Calendar events |
+| `/gmail/unread` | GET | List unread Gmail messages |
+| `/gmail/message/{id}` | GET | Full plain-text body of one message |
+| `/gmail/trash/{id}` | POST | Move a message to Trash |
+
 ### Example: stream a chat response
 
 ```bash
@@ -360,7 +474,7 @@ Browsers enforce an autoplay policy that blocks `audio.play()` until the user ha
 
 ## Roadmap
 
-See [TODO.md](./TODO.md) for the full phased build checklist.
+See [`markdown/TODO.md`](./markdown/TODO.md) for the full phased build checklist.
 
 High-level milestones:
 - [x] Project scaffolding and documentation
@@ -371,12 +485,12 @@ High-level milestones:
 - [x] Living black sphere (Three.js) — 7 orbiting light orbs, audio-driven deformation, 4-state machine
 - [x] Per-model GPU/CPU device reporting in footer (`/system-status`)
 - [x] Model warm-up on page load — Kokoro + Whisper pre-heated, GPU badges populated before first mic press
-- [x] GPU dispatch working for both Whisper (CUDA) and Kokoro (DirectML / CUDA)
 - [x] LLM metrics bar — prompt tokens, generation speed, time, and context window fill percentage
-- [ ] Sentence-chunked TTS latency further tuning
-- [ ] Tool use / function calling
+- [x] **Voice-triggered dossier / presentation mode** — voice trigger intercept, neon border animation, four-zone layout reconfiguration, manifest-driven image + structured text loading, LLM auto-briefing via sentence-chunked TTS
+- [x] **RAG memory system** — ChromaDB + BM25/vector fusion; `make rag-ingest` indexes any `.md`/`.txt` files dropped into `memory/input/`
+- [ ] **Phase 11 — Tool kit** — 12 voice-activated tools (time, timers, weather, news, stocks, wake word, browser panel, ideas, journal, Wikipedia RAG, Calendar, Gmail); see [`markdown/`](./markdown/) for implementation guides
 - [ ] Electron desktop app packaging
-- [x] **Voice-triggered dossier / presentation mode** — all four phases complete: voice trigger intercept, neon border animation, four-zone layout reconfiguration, manifest-driven image + structured text loading, LLM auto-briefing spoken aloud via sentence-chunked TTS; sub-4 s end-to-end for retrieval and presentation
+- [ ] GraphRAG knowledge graph memory
 
 ---
 

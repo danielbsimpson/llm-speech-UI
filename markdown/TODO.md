@@ -242,6 +242,332 @@ Remove background/border styling from message containers so text floats freely. 
 
 ---
 
+## Phase 11 — Tool Use (Voice-Activated Features)
+
+Each tool is a self-contained intercept added before the `sendToOllama()` call in
+`mediaRecorder.onstop` and `handleSend()`. None modify existing pipeline logic — they all
+follow the established pattern: check transcript → return early if matched → resume normal
+LLM path if not matched.
+
+**Implementation guides** live in `markdown/` — one file per tool.
+
+### Prerequisite — One-time ES Module Conversion
+
+All tools are written as ES modules (`export function …`). Before implementing any tool, convert
+the `app.js` script tag in `index.html` from classic to module:
+
+```html
+<!-- Before -->
+<script src="app.js?v=4"></script>
+
+<!-- After -->
+<script type="module" src="app.js?v=4"></script>
+```
+
+This is the only change required to the existing `index.html`. It unlocks `import` statements
+at the top of `app.js` for every tool below. Each guide also documents an "inline" fallback
+(copy functions directly into `app.js`) for anyone who wants to defer this change.
+
+---
+
+### Risk / Effort Tiers
+
+Tools are ordered from lowest to highest disruption to the existing pipeline:
+
+| # | Tool | Guide | Backend changes | New deps | Risk |
+|---|---|---|---|---|---|
+| 1 | Time & Date | `TIME.md` | None | None | 🟢 Trivial |
+| 2 | Timers | `TIMER.md` | None | None | 🟢 Trivial |
+| 3 | Weather | `WEATHER.md` | 1 new router file | `httpx` | 🟢 Low |
+| 4 | News Briefing | `NEWS.md` | 1 new router file | `feedparser` | 🟢 Low |
+| 5 | Stocks & Crypto | `STOCKS.md` | 1 new router file | `yfinance` | 🟡 Low-Med |
+| 6 | Wake Word & Interrupt | `WAKE_WORD.md` | None | None | 🟡 Medium |
+| 7 | In-UI Browser Panel | `WEBCALL.md` | None | None | 🟡 Medium |
+| 8 | Ideas Tracker | `IDEAS_TRACKER.md` | 1 new router file | None | 🟡 Medium |
+| 9 | Journal | `JOURNAL.md` | 1 new router file | None | 🟡 Med-High |
+| 10 | Wikipedia RAG | `WIKIPEDIA.md` | 1 new router file | `faiss-cpu` / `chromadb`, embeddings model | 🟠 High |
+| 11 | Google Calendar | `CALENDAR.md` | 1 new router file | `google-api-python-client` | 🔴 High |
+| 12 | Gmail | `GMAIL.md` | 1 new router file | `google-api-python-client` | 🔴 High |
+
+---
+
+### Tool 1 — Time & Date (`TIME.md`) 🟢
+
+> **Guide:** `markdown/TIME.md`  
+> **Pipeline risk:** None — zero backend, zero LLM involvement, sub-200 ms response.
+
+`Date()` in the browser is read at trigger time and formatted directly into natural prose.
+No backend file, no new dependency, no mode flag. The spoken response is enqueued to Kokoro
+before any network call could even be made.
+
+- [ ] Add `detectTimeTrigger(transcript)` function to `app.js` (or import from `time-panel.js`)
+- [ ] Add time intercept block in `mediaRecorder.onstop` — format `Date()` → `appendMessage` + `enqueueSpeak` → `return`
+- [ ] Mirror intercept in `handleSend()`
+- [ ] (Optional) Add clock panel HTML + CSS to `index.html` / `style.css` for a live digital readout
+- [ ] (Optional) Add date query extension: "what day is it", "what's the date today"
+
+---
+
+### Tool 2 — Timers (`TIMER.md`) 🟢
+
+> **Guide:** `markdown/TIMER.md`  
+> **Pipeline risk:** None — zero backend, pure `setInterval`, Web Audio API chime reuses `_getAudioCtx()`.
+
+Timers run entirely in the browser. The existing `_getAudioCtx()` function is reused for the
+completion chime — no new AudioContext is created. Multiple named timers are supported.
+
+- [ ] Create `frontend/timer-panel.js` — `detectTimerTrigger()`, `setTimer()`, `cancelTimer()`, `listTimers()`
+- [ ] Import in `app.js` and add timer intercept block in `onstop` + `handleSend`
+- [ ] Add timer panel HTML to `index.html` (card list with countdown display)
+- [ ] Add timer CSS to `style.css`
+- [ ] Add `_getAudioCtx()` chime synthesis in `timer-panel.js` (reuses shared AudioContext)
+- [ ] Test named timers: "set a 5-minute timer called pasta", "cancel the pasta timer"
+- [ ] Test auto-stop: timer chimes and speaks "Timer complete: pasta" via `enqueueSpeak`
+
+---
+
+### Tool 3 — Weather (`WEATHER.md`) 🟢
+
+> **Guide:** `markdown/WEATHER.md`  
+> **Pipeline risk:** Low — one new router file, one new frontend module. Uses Open-Meteo (free, no API key, no account).
+
+Follows the exact dossier intercept pattern already proven in the codebase. Backend calls
+Open-Meteo's free public API. No authentication required.
+
+- [ ] `pip install httpx` (or confirm already present in `requirements.txt`)
+- [ ] Create `backend/weather.py` — `GET /weather` endpoint (lat/lon from `.env`, calls Open-Meteo)
+- [ ] Register `weather_router` in `backend/main.py`
+- [ ] Add `WEATHER_LAT`, `WEATHER_LON`, `WEATHER_UNITS` to `.env` / `.env.example`
+- [ ] Create `frontend/weather-panel.js` — `detectWeatherTrigger()`, `openWeatherPanel()`, render forecast cards
+- [ ] Import in `app.js` and add weather intercept block in `onstop` + `handleSend`
+- [ ] Add weather panel HTML to `index.html`
+- [ ] Add weather panel CSS to `style.css`
+- [ ] Test: "What's the weather?" → panel opens + LLM spoken summary of current conditions + 7-day forecast
+
+---
+
+### Tool 4 — News Briefing (`NEWS.md`) 🟢
+
+> **Guide:** `markdown/NEWS.md`  
+> **Pipeline risk:** Low — RSS via `feedparser`, free, no API key. Same intercept pattern as weather.
+
+RSS feeds are parsed server-side to avoid CORS. Headline cards are rendered in a panel;
+the LLM delivers a spoken briefing from structured context injection.
+
+- [ ] `pip install feedparser`
+- [ ] Create `backend/news.py` — `GET /news` endpoint, configurable RSS feed list, 2-minute cache
+- [ ] Register `news_router` in `backend/main.py`
+- [ ] Add `NEWS_FEEDS` (comma-separated RSS URLs), `NEWS_MAX_ITEMS`, `NEWS_CACHE_SECONDS` to `.env`
+- [ ] Create `frontend/news-panel.js` — `detectNewsTrigger()`, `openNewsPanel()`, render headline cards by source
+- [ ] Import in `app.js` and add news intercept block in `onstop` + `handleSend`
+- [ ] Add news panel HTML to `index.html`
+- [ ] Add news panel CSS to `style.css`
+- [ ] Test: "News briefing" → panel opens with headlines + LLM spoken summary of top stories
+
+---
+
+### Tool 5 — Stocks & Crypto (`STOCKS.md`) 🟡
+
+> **Guide:** `markdown/STOCKS.md`  
+> **Pipeline risk:** Low-Medium — `yfinance` is an unofficial Yahoo Finance scraper (personal use acceptable). Occasionally breaks when Yahoo changes response format; not suitable for production.
+
+Same intercept and panel pattern as weather and news. No API key required.
+
+- [ ] `pip install yfinance`
+- [ ] Create `backend/stocks.py` — `GET /stocks` endpoint, configurable ticker list, 5-minute cache
+- [ ] Register `stocks_router` in `backend/main.py`
+- [ ] Add `STOCKS_TICKERS` (comma-separated), `STOCKS_CACHE_SECONDS` to `.env`
+- [ ] Create `frontend/stocks-panel.js` — `detectMarketTrigger()`, `openStocksPanel()`, render ticker grid
+- [ ] Import in `app.js` and add stocks intercept block in `onstop` + `handleSend`
+- [ ] Add stocks panel HTML + CSS
+- [ ] Test: "What's the market doing?" → panel + LLM spoken summary of movers
+
+---
+
+### Tool 6 — Wake Word & Interruptible Conversations (`WAKE_WORD.md`) 🟡
+
+> **Guide:** `markdown/WAKE_WORD.md`  
+> **Pipeline risk:** Medium — the always-on Web Speech API listener runs concurrently with `MediaRecorder`. State guards prevent double-recording but require careful ordering. Chrome/Edge only; gracefully disabled in other browsers.
+
+The wake word listener and the interrupt system share the same module. Two new keyboard
+shortcuts are also added (Escape = hard stop, existing Spacebar enhanced with interrupt flash).
+
+- [ ] Create `frontend/wake-word.js` — `initWakeWord()`, `startWakeWordListener()`, `stopWakeWordListener()`, `isListening()`
+- [ ] Add wake word indicator badge HTML to `index.html` (footer bar)
+- [ ] Add WAKE toggle button HTML to `index.html` (bottom bar)
+- [ ] Add wake indicator, toggle button, and `interruptFlash` CSS to `style.css`
+- [ ] Import in `app.js` — `initWakeWord({ onWakeWord, onInterrupt, onListenerOn, onListenerOff, getState })`
+- [ ] Add `_setWakeUI()` helper and `_triggerInterruptFlash()` helper in `app.js`
+- [ ] Wire `onWakeWord` callback → `startRecording()` (with state guard: skip if `listening` or `transcribing`)
+- [ ] Wire `onInterrupt` callback → `clearAudioQueue()` + 250 ms delay + `startRecording()`
+- [ ] Add Escape key listener: hard stop speech/recording → `setState('idle')`
+- [ ] Add interrupt flash to mic `mousedown` and spacebar `keydown` when `state === 'speaking'`
+- [ ] Persist wake word on/off preference to `localStorage`
+- [ ] Test: say "Hey Starling" → mic activates hands-free
+- [ ] Test: say "Stop" or "Hey Starling" mid-speech → speech cuts, mic opens
+- [ ] Test: press Escape mid-speech → hard stop, returns to idle
+
+---
+
+### Tool 7 — In-UI Browser Panel (`WEBCALL.md`) 🟡
+
+> **Guide:** `markdown/WEBCALL.md`  
+> **Pipeline risk:** Medium — frontend-only iframe panel. Many sites block embedding via `X-Frame-Options` / CSP; the guide documents a fallback "open in new tab" path for those. No changes to the recording or TTS pipelines.
+
+Trigger phrase opens a sandboxed iframe panel immediately (zero LLM latency). An optional
+backend CORS proxy endpoint can be added later for sites that block direct embedding.
+
+- [ ] Add browser panel HTML to `index.html` (iframe + toolbar + overlay)
+- [ ] Add browser panel CSS to `style.css`
+- [ ] Create `frontend/browser-panel.js` (or inline in `app.js`) — `detectBrowserTrigger()`, `openBrowserPanel()`, URL bar wiring, back/forward/refresh, fallback "open in new tab"
+- [ ] Import / add intercept in `onstop` + `handleSend`
+- [ ] Test: "Open YouTube" → panel opens to youtube.com (or falls back to new tab if blocked)
+- [ ] Test: "Search Google for weather in New York" → URL bar auto-populated
+
+---
+
+### Tool 8 — Ideas Tracker (`IDEAS_TRACKER.md`) 🟡
+
+> **Guide:** `markdown/IDEAS_TRACKER.md`  
+> **Pipeline risk:** Medium — introduces `ideasMode` flag, which gates the next mic press. The flag is checked at position 2 in the intercept chain (immediately after `journalMode`). Must be explicitly cleared in the clear/reset button handler.
+
+Single-press capture: trigger phrase opens panel, next mic press is the idea, LLM auto-generates
+a short title, saved to `memory/ideas.json`. Simpler than Journal — no multi-segment
+accumulation, no approval step.
+
+- [ ] Create `backend/ideas_routes.py` — `POST /ideas/add`, `GET /ideas`, `GET /ideas/search`, `DELETE /ideas/{id}`, `DELETE /ideas`
+- [ ] Register `ideas_router` in `backend/main.py`
+- [ ] Add `IDEAS_FILE`, `IDEAS_MAX_RETURN` to `.env`
+- [ ] Create `frontend/ideas-panel.js` — `detectIdeaCaptureTrigger()`, `detectIdeaReadTrigger()`, `enterIdeasMode()`, `exitIdeasMode()`, `processIdea()`, `handleIdeaRead()`
+- [ ] Import in `app.js`; add `ideasMode` check at position 2 in `onstop` intercept chain
+- [ ] Add capture + read trigger intercepts in `onstop` + `handleSend`
+- [ ] Add `exitIdeasMode()` to clear button handler
+- [ ] Add ideas panel HTML to `index.html` (capture view + list view)
+- [ ] Add ideas panel CSS (amber/gold accent)
+- [ ] Add `memory/ideas.json` to `.gitignore`
+- [ ] Test capture: "Store my idea" → panel appears → speak idea → "Idea stored: [title]"
+- [ ] Test read-back: "Show my ideas" → numbered card list + LLM reads titles
+- [ ] Test discard: "Discard my last idea" → most recent removed + spoken confirmation
+
+---
+
+### Tool 9 — Voice Journal (`JOURNAL.md`) 🟡
+
+> **Guide:** `markdown/JOURNAL.md`  
+> **Pipeline risk:** Medium-High — introduces `journalMode` flag which **must be checked FIRST** in the intercept chain (position 1, before all other tools including `ideasMode`). While in journal mode every mic press is consumed as a journal segment — no other trigger can fire. Failure to place this check at position 1 will cause other tools to misdirect journal segments.
+
+Multi-press dictation mode: user speaks journal content across multiple mic presses, LLM
+summarises the full session, user confirms before saving to disk.
+
+- [ ] Create `backend/journal_routes.py` — `POST /journal/save`, `GET /journal/entries`, `GET /journal/search`, `DELETE /journal/entry/{id}`
+- [ ] Register `journal_router` in `backend/main.py`
+- [ ] Add `JOURNAL_DIR`, `JOURNAL_MAX_ENTRIES` to `.env`
+- [ ] Create `frontend/journal-panel.js` — `detectJournalStartTrigger()`, `detectJournalReadTrigger()`, `enterJournalMode()`, `exitJournalMode()`, `addJournalSegment()`, `submitJournal()`, `handleJournalRead()`
+- [ ] Import in `app.js`; add `journalMode` check at **position 1** (very top of intercept chain) in `onstop`
+- [ ] Add journal start + read trigger intercepts in `onstop` + `handleSend`
+- [ ] Add `exitJournalMode()` to clear button handler
+- [ ] Add journal panel HTML to `index.html` (dictation view + review/confirm view + entries list)
+- [ ] Add journal panel CSS (violet accent)
+- [ ] Add `memory/journal/` to `.gitignore`
+- [ ] Test dictation: "Start a journal entry" → multiple mic presses → "Done" → LLM summary shown → confirm to save
+- [ ] Test read-back: "Read my journal" → entry list + LLM reads most recent
+- [ ] Test search: "Search journal for meeting" → filtered entries
+
+---
+
+### Tool 10 — Wikipedia RAG (`WIKIPEDIA.md`) 🟠
+
+> **Guide:** `markdown/WIKIPEDIA.md`  
+> **Pipeline risk:** High — new Python dependencies (`faiss-cpu` or `chromadb`, `sentence-transformers` or `nomic-embed-text`), a one-time corpus ingestion step, and in-memory session management on the backend. The trigger phrase `"wikipedia search"` is distinct from `"dossier"` and does not affect the existing RAG path. All existing files remain untouched.
+
+Implement Phase 1 first (Simple English Wikipedia, ~250 MB, ~200,000 articles). Phases 2–3
+(full English Wikipedia, live API, custom embeddings) are optional expansions.
+
+- [ ] `pip install faiss-cpu sentence-transformers` (or `chromadb` as vector store alternative)
+- [ ] Download Simple English Wikipedia dump (see guide for direct URL)
+- [ ] Create `backend/wikipedia_rag.py` — ingestion pipeline, FAISS index, `WikipediaSession` class
+- [ ] Create `backend/wiki_routes.py` — `POST /wiki/search`, `POST /wiki/chat`, `DELETE /wiki/session`
+- [ ] Register `wiki_router` in `backend/main.py`
+- [ ] Add `WIKI_INDEX_PATH`, `WIKI_EMBED_MODEL`, `WIKI_TOP_K` to `.env`
+- [ ] Create `frontend/wiki-panel.js` — `detectWikiTrigger()`, `openWikiPanel()`, session Q&A flow
+- [ ] Import in `app.js` and add wiki intercept block in `onstop` + `handleSend`
+- [ ] Add wiki panel HTML + CSS
+- [ ] Run one-time ingestion: `python backend/wikipedia_rag.py --ingest` (allow 30–60 min)
+- [ ] Test: "Wikipedia search" → Starling asks what to look up → Q&A grounded in article → no hallucination
+
+---
+
+### Tool 11 — Google Calendar (`CALENDAR.md`) 🔴
+
+> **Guide:** `markdown/CALENDAR.md`  
+> **Pipeline risk:** High — requires a Google Cloud project, OAuth2 Desktop app credentials, and a one-time browser auth flow. The token auto-refreshes after initial setup. Backend file named `calendar_routes.py` (NOT `calendar.py`) to avoid Python stdlib collision.
+
+- [ ] Create Google Cloud project and enable Google Calendar API (see guide Step A1)
+- [ ] Download OAuth credentials JSON → `credentials/google_calendar_credentials.json`
+- [ ] Add `credentials/` to `.gitignore`
+- [ ] `pip install google-api-python-client google-auth-httplib2 google-auth-oauthlib`
+- [ ] Run one-time auth: `python scripts/auth_google_calendar.py` (creates `google_token.json`)
+- [ ] Create `backend/calendar_routes.py` — `GET /calendar/today`, `GET /calendar/week`
+- [ ] Register `calendar_router` in `backend/main.py`
+- [ ] Add `CALENDAR_BACKEND`, `GOOGLE_CREDENTIALS_FILE`, `GOOGLE_TOKEN_FILE`, `CALENDAR_TIMEZONE` to `.env`
+- [ ] Create `frontend/calendar-panel.js` — `detectCalendarTrigger()`, event list, week view
+- [ ] Import in `app.js` and add calendar intercept block in `onstop` + `handleSend`
+- [ ] Add calendar panel HTML + CSS
+- [ ] Test: "What's on my schedule today?" → event list + LLM spoken daily briefing
+
+---
+
+### Tool 12 — Gmail (`GMAIL.md`) 🔴
+
+> **Guide:** `markdown/GMAIL.md`  
+> **Pipeline risk:** High — same OAuth2 setup complexity as Calendar. Requires `gmail.readonly` + `gmail.modify` scopes. If Calendar OAuth is already configured, the same Google Cloud project is reused — add the Gmail scopes and re-run auth. Body truncated at 6,000 chars before LLM injection to avoid context overflow.
+
+- [ ] Enable Gmail API in existing Google Cloud project (or create one if Calendar was skipped)
+- [ ] Add `gmail.readonly` and `gmail.modify` scopes to OAuth consent screen
+- [ ] Download OAuth credentials → `credentials/google_gmail_credentials.json` (can reuse calendar creds file)
+- [ ] Run one-time auth: `python scripts/auth_gmail.py` (creates `google_gmail_token.json`)
+- [ ] Create `backend/gmail_routes.py` — `GET /gmail/unread`, `GET /gmail/message/{id}`, `POST /gmail/trash/{id}`
+- [ ] Register `gmail_router` in `backend/main.py`
+- [ ] Add `GMAIL_CREDENTIALS_FILE`, `GMAIL_TOKEN_FILE`, `GMAIL_MAX_UNREAD`, `GMAIL_CACHE_SECONDS` to `.env`
+- [ ] Create `frontend/gmail-panel.js` — `detectGmailTrigger()`, inbox list, message view, summarise, trash
+- [ ] Call `wireGmailActionButtons()` once on page init (wires SUMMARISE + DELETE buttons)
+- [ ] Import in `app.js` and add gmail intercept block in `onstop` + `handleSend`
+- [ ] Add `gmailPanel.classList.add('hidden')` to clear button handler
+- [ ] Add Gmail panel HTML + CSS (inbox view + message view)
+- [ ] Test: "View my emails" → inbox + LLM spoken count and sender briefing
+- [ ] Test: "Summarize that email" → 3–5 sentence LLM summary of open message
+- [ ] Test: "Delete that email" → moves to Trash + spoken confirmation
+
+---
+
+### Final Intercept Order (all tools implemented)
+
+Once all tools are active, the intercept chain in `mediaRecorder.onstop` and `handleSend`
+must follow this exact order to avoid mode flag collisions:
+
+```
+1.  journalMode active check      ← MUST be first (gates all mic presses in journal mode)
+2.  ideasMode active check        ← MUST be second (gates next mic press in ideas mode)
+3.  _matchesExitPhrase            ← dossier exit
+4.  _parseTrigger                 ← dossier open
+5.  detectJournalStartTrigger     ← enter journal dictation mode
+6.  detectJournalReadTrigger      ← journal read / search / delete
+7.  detectIdeaCaptureTrigger      ← enter ideas capture mode
+8.  detectIdeaReadTrigger         ← ideas list / search / discard / clear
+9.  detectTimerTrigger            ← timer set / cancel / status
+10. detectTimeTrigger             ← time / date query
+11. detectWeatherTrigger          ← weather forecast
+12. detectCalendarTrigger         ← calendar schedule
+13. detectNewsTrigger             ← news briefing
+14. detectMarketTrigger           ← stocks / crypto
+15. detectGmailTrigger            ← Gmail inbox / open / summarise / trash
+16. detectWikiTrigger             ← Wikipedia RAG search
+17. detectBrowserTrigger          ← in-UI browser panel
+18. appendMessage + sendToOllama  ← normal LLM path (catch-all)
+```
+
+---
+
 ## Stretch Goals
 
 - [ ] Add tool use / function calling (weather, web search, calendar)
