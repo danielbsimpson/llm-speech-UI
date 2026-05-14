@@ -300,11 +300,11 @@ Tools are ordered from lowest to highest disruption to the existing pipeline:
 No backend file, no new dependency, no mode flag. The spoken response is enqueued to Kokoro
 before any network call could even be made.
 
-- [ ] Add `detectTimeTrigger(transcript)` function to `app.js` (or import from `time-panel.js`)
-- [ ] Add time intercept block in `mediaRecorder.onstop` — format `Date()` → `appendMessage` + `enqueueSpeak` → `return`
-- [ ] Mirror intercept in `handleSend()`
-- [ ] (Optional) Add clock panel HTML + CSS to `index.html` / `style.css` for a live digital readout
-- [ ] (Optional) Add date query extension: "what day is it", "what's the date today"
+- [x] Add `detectTimeTrigger(transcript)` function to `app.js` (or import from `time-panel.js`)
+- [x] Add time intercept block in `mediaRecorder.onstop` — format `Date()` → `appendMessage` + `enqueueSpeak` → `return`
+- [x] Mirror intercept in `handleSend()`
+- [x] (Optional) Add clock panel HTML + CSS to `index.html` / `style.css` for a live digital readout
+- [x] (Optional) Add date query extension: "what day is it", "what's the date today"
 
 ---
 

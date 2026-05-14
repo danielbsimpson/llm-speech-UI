@@ -724,3 +724,68 @@ html, body {
   font-size: 8px; letter-spacing: 2px;
   color: rgba(200,200,200,0.35); flex-shrink: 0; min-width: 50px; text-align: right;
 }
+
+/* ── Clock Panel ─────────────────────────────────────────────────────────────── */
+
+.clock-panel {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  z-index: 10;
+  background: rgba(10, 10, 10, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 10px;
+  padding: 12px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  backdrop-filter: blur(14px);
+  animation: clockFadeIn 0.3s ease;
+}
+
+.clock-panel.hidden {
+  display: none;
+}
+
+.clock-panel.dismissing {
+  animation: clockFadeOut 0.8s ease forwards;
+}
+
+@keyframes clockFadeIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes clockFadeOut {
+  from { opacity: 1; }
+  to   { opacity: 0; pointer-events: none; }
+}
+
+.clock-time {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: clamp(1.5rem, 3.5vw, 2.2rem);
+  color: #ffffff;
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+
+.clock-detail {
+  display: flex;
+  gap: 16px;
+  align-items: baseline;
+}
+
+.clock-date {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: clamp(0.7rem, 1.5vw, 0.9rem);
+  color: #aaa;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.clock-tz {
+  font-size: 0.62rem;
+  color: #555;
+  letter-spacing: 0.08em;
+}

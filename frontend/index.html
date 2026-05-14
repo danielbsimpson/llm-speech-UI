@@ -56,6 +56,14 @@
         </div>
         <!-- Chat panel — hidden in normal mode, slides in below sphere in pres-mode -->
         <div class="chat-panel">
+          <!-- Clock Panel — overlays top of conversation window, auto-dismisses -->
+          <div class="clock-panel hidden" id="clock-panel">
+            <div class="clock-time" id="clock-time">—</div>
+            <div class="clock-detail">
+              <span class="clock-date" id="clock-date">—</span>
+              <span class="clock-tz"   id="clock-tz">—</span>
+            </div>
+          </div>
           <div class="chat-inner" id="chat-inner"></div>
         </div>
       </div>

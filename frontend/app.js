@@ -276,6 +276,14 @@ const presTitle = document.getElementById('pres-dossier-title');
 const presBody  = document.getElementById('pres-dossier-body');
 const presMeta  = document.getElementById('pres-dossier-meta');
 
+// ── Clock / Date panel DOM refs ──────────────────────────────────────────────
+const clockPanel = document.getElementById('clock-panel');
+const clockTime  = document.getElementById('clock-time');
+const clockDate  = document.getElementById('clock-date');
+const clockTz    = document.getElementById('clock-tz');
+let   _clockDismissTimer = null;
+let   _clockTickInterval  = null;
+
 // ── Sphere shared state ─────────────────────────────────────────────────────────────
 const sphereStateRef    = { current: 'idle' };
 const sphereAnalyserRef = { an: null, data: null };
@@ -374,6 +382,151 @@ async function fetchSystemStatus() {
     setDev(ftrLlmDev,     llm);
     if (ftrLlmAddr && llm_url) ftrLlmAddr.textContent = llm_url;
   } catch { /* backend offline — ignore */ }
+}
+
+// ── Time & Date query ────────────────────────────────────────────────────────
+
+/**
+ * Detect a time query in a Whisper transcript.
+ * Returns true if matched, null otherwise.
+ */
+function detectTimeTrigger(transcript) {
+  const t = transcript.trim().toLowerCase();
+  const patterns = [
+    /\bwhat(?:'s| is)\s+the\s+time\b/,
+    /\bwhat\s+time\s+is\s+it\b/,
+    /\btell\s+me\s+the\s+time\b/,
+    /\bdo\s+you\s+know\s+(?:what\s+)?the\s+time\b/,
+    /\bcurrent\s+time\b/,
+    /\bcan\s+you\s+(?:tell\s+me\s+)?the\s+time\b/,
+    /\btime\s+(?:please|now)\b/,
+    /\bwhat\s+time\s+(?:is\s+it\s+)?(?:right\s+now|now)\b/,
+    /\bhow\s+late\s+is\s+it\b/,
+  ];
+  return patterns.some(p => p.test(t)) ? true : null;
+}
+
+/**
+ * Detect a date query in a Whisper transcript.
+ * Returns true if matched, null otherwise.
+ * Checked before detectTimeTrigger — date phrases are more specific.
+ */
+function detectDateTrigger(transcript) {
+  const t = transcript.trim().toLowerCase();
+  const patterns = [
+    /\bwhat(?:'s| is)\s+(?:today(?:'s)?|the)\s+date\b/,
+    /\bwhat\s+day\s+(?:is\s+it|of\s+the\s+week)\b/,
+    /\bwhat\s+(?:day|date)\s+is\s+(?:it\s+)?today\b/,
+    /\btoday(?:'s)?\s+date\b/,
+    /\bwhat\s+day\s+is\s+(?:it\s+)?today\b/,
+  ];
+  return patterns.some(p => p.test(t)) ? true : null;
+}
+
+/** Format the current time into a natural spoken phrase. */
+function _formatTimeSpoken(now) {
+  const h   = now.getHours();
+  const m   = now.getMinutes();
+  const min = m === 0   ? 'on the hour'
+            : m < 10   ? `oh ${m}`
+            : String(m);
+  const hr12   = h % 12 === 0 ? 12 : h % 12;
+  const period = h < 12  ? 'in the morning'
+               : h < 17  ? 'in the afternoon'
+               : h < 21  ? 'in the evening'
+               : 'at night';
+  const timeStr = m === 0 ? `${hr12} ${period}` : `${hr12} ${min} ${period}`;
+  return `It's ${timeStr}.`;
+}
+
+/** Format the current date into a natural spoken phrase. */
+function _formatDateSpoken(now) {
+  const days   = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const months = ['January','February','March','April','May','June','July',
+                  'August','September','October','November','December'];
+  const ord = (n) => {
+    const s = ['th','st','nd','rd'];
+    const v = n % 100;
+    return n + (s[(v - 20) % 10] ?? s[v] ?? s[0]);
+  };
+  return `Today is ${days[now.getDay()]}, the ${ord(now.getDate())} of ${months[now.getMonth()]}, ${now.getFullYear()}.`;
+}
+
+/** Show the clock panel, update its content, and schedule auto-dismiss. */
+function _showClockPanel(timeDisplay, dateDisplay, tz) {
+  if (!clockPanel || !clockTime || !clockDate || !clockTz) return;
+  clockPanel.classList.remove('hidden', 'dismissing');
+  clockTime.textContent = timeDisplay;
+  clockDate.textContent = dateDisplay.toUpperCase();
+  clockTz.textContent   = tz;
+  // Live tick — update the time display every second
+  if (_clockTickInterval) clearInterval(_clockTickInterval);
+  _clockTickInterval = setInterval(() => {
+    clockTime.textContent = new Date().toLocaleTimeString('en-US', {
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true,
+    });
+  }, 1000);
+  // Auto-dismiss after 30 seconds with a fade
+  if (_clockDismissTimer) clearTimeout(_clockDismissTimer);
+  _clockDismissTimer = setTimeout(() => _dismissClockPanel(false), 30_000);
+}
+
+/**
+ * Dismiss the clock panel.
+ * instantly=true  — immediate hide (user triggered a new action).
+ * instantly=false — fade out over 0.8 s (auto-dismiss after 30 s).
+ */
+function _dismissClockPanel(instantly = true) {
+  if (!clockPanel || clockPanel.classList.contains('hidden')) return;
+  if (_clockDismissTimer) { clearTimeout(_clockDismissTimer); _clockDismissTimer = null; }
+  if (_clockTickInterval) { clearInterval(_clockTickInterval); _clockTickInterval = null; }
+  if (instantly) {
+    clockPanel.classList.remove('dismissing');
+    clockPanel.classList.add('hidden');
+  } else {
+    clockPanel.classList.add('dismissing');
+    setTimeout(() => clockPanel.classList.add('hidden'), 800);
+  }
+}
+
+/**
+ * Handle a time query — reads Date() directly, speaks immediately, no LLM call.
+ */
+function handleTimeQuery(transcript) {
+  const now = new Date();
+  const tz  = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const timeDisplay = now.toLocaleTimeString('en-US', {
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true,
+  });
+  const dateDisplay = now.toLocaleDateString('en-US', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+  });
+  _showClockPanel(timeDisplay, dateDisplay, tz);
+  const spoken = _formatTimeSpoken(now);
+  appendMessage('user', transcript);
+  const { txt } = appendMessage('assistant', spoken);
+  setState('speaking');
+  enqueueSpeak(spoken, () => { txt.textContent = spoken; });
+}
+
+/**
+ * Handle a date query — reads Date() directly, speaks immediately, no LLM call.
+ */
+function handleDateQuery(transcript) {
+  const now = new Date();
+  const tz  = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const timeDisplay = now.toLocaleTimeString('en-US', {
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true,
+  });
+  const dateDisplay = now.toLocaleDateString('en-US', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+  });
+  _showClockPanel(timeDisplay, dateDisplay, tz);
+  const spoken = _formatDateSpoken(now);
+  appendMessage('user', transcript);
+  const { txt } = appendMessage('assistant', spoken);
+  setState('speaking');
+  enqueueSpeak(spoken, () => { txt.textContent = spoken; });
 }
 
 // ── Waveform bars ─────────────────────────────────────────────────────────────
@@ -1095,6 +1248,7 @@ async function handleSend() {
   if (!text) return;
   _rttStart = performance.now();            // start RTT clock for text-input path
   clearAudioQueue();  // stop any in-progress speech before new request
+  _dismissClockPanel();
   textInput.value = '';
 
   // ── Presentation mode intercept ──────────────────────────────────────────
@@ -1111,6 +1265,20 @@ async function handleSend() {
   }
   // ────────────────────────────────────────────────────────────────────────
 
+  // ── Date query intercept (checked before time — phrases are more specific) ──
+  if (detectDateTrigger(text)) {
+    setState('idle');
+    handleDateQuery(text);
+    return;
+  }
+  // ── Time query intercept ────────────────────────────────────────────────────
+  if (detectTimeTrigger(text)) {
+    setState('idle');
+    handleTimeQuery(text);
+    return;
+  }
+  // ────────────────────────────────────────────────────────────────────────
+
   appendMessage('user', text);
   await sendToOllama(text);
   fetchSystemStatus();
@@ -1120,10 +1288,12 @@ sendBtn.addEventListener('click', handleSend);
 textInput.addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
 });
+textInput.addEventListener('input', _dismissClockPanel);
 
 // ── Clear conversation ────────────────────────────────────────────────────────
 clearBtn.addEventListener('click', () => {
   clearAudioQueue();
+  _dismissClockPanel();
   exitPresMode();
   conversationHistory = [{ role: 'system', content: SYSTEM_PROMPT }];
   chatInner.innerHTML = '';
@@ -1137,6 +1307,7 @@ let audioChunks   = [];
 async function startRecording() {
   if (mediaRecorder && mediaRecorder.state !== 'inactive') return; // guard
   clearAudioQueue();  // interrupt any ongoing speech
+  _dismissClockPanel();
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     startAudioViz(stream);
@@ -1179,6 +1350,20 @@ async function startRecording() {
         if (_triggerResult.matched) {
           enterPresMode(_triggerResult.subject);
           setState('idle');
+          return;
+        }
+        // ────────────────────────────────────────────────────────────────
+
+        // ── Date query intercept (checked before time — phrases are more specific) ──
+        if (detectDateTrigger(transcript)) {
+          setState('idle');
+          handleDateQuery(transcript);
+          return;
+        }
+        // ── Time query intercept ──────────────────────────────────────────────
+        if (detectTimeTrigger(transcript)) {
+          setState('idle');
+          handleTimeQuery(transcript);
           return;
         }
         // ────────────────────────────────────────────────────────────────
