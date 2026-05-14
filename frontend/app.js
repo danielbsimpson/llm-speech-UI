@@ -1254,6 +1254,7 @@ async function handleSend() {
   clearAudioQueue();  // stop any in-progress speech before new request
   _dismissClockPanel();
   textInput.value = '';
+  closeWeatherPanel();
 
   // ── Presentation mode intercept ──────────────────────────────────────────
   if (_matchesExitPhrase(text)) {
@@ -1379,6 +1380,7 @@ async function startRecording() {
         const { transcript } = await r.json();
         if (!transcript) { setState('idle'); return; }
 
+        closeWeatherPanel();
         // ── Presentation mode intercept ──────────────────────────────────
         if (_matchesExitPhrase(transcript)) {
           exitPresMode();

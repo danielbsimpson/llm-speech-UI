@@ -30,6 +30,9 @@ const WMO_ICON = {
   95: '⛈', 96: '⛈', 99: '⛈',
 };
 
+// ── Auto-dismiss ─────────────────────────────────────────────────────────────
+let _autoDismissTimer = null;
+
 // ── Trigger detection ─────────────────────────────────────────────────────────
 
 /**
@@ -93,10 +96,16 @@ export async function openWeatherPanel(locationOverride = null) {
   // Update footer badge
   if (ftrWxBadge) ftrWxBadge.textContent = data.location.split(',')[0].toUpperCase();
 
+  // Auto-dismiss after 30 seconds if no other action clears it first
+  clearTimeout(_autoDismissTimer);
+  _autoDismissTimer = setTimeout(closeWeatherPanel, 30_000);
+
   return data.llm_context;
 }
 
 export function closeWeatherPanel() {
+  clearTimeout(_autoDismissTimer);
+  _autoDismissTimer = null;
   wxPanel.classList.add('hidden');
 }
 
