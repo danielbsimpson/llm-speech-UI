@@ -428,15 +428,15 @@ WEATHER_DEFAULT_LABEL=Framingham
 RSS feeds are parsed server-side to avoid CORS. Headline cards are rendered in a panel;
 the LLM delivers a spoken briefing from structured context injection.
 
-- [ ] `pip install feedparser`
-- [ ] Create `backend/news.py` — `GET /news` endpoint, configurable RSS feed list, 2-minute cache
-- [ ] Register `news_router` in `backend/main.py`
-- [ ] Add `NEWS_FEEDS` (comma-separated RSS URLs), `NEWS_MAX_ITEMS`, `NEWS_CACHE_SECONDS` to `.env`
-- [ ] Create `frontend/news-panel.js` — `detectNewsTrigger()`, `openNewsPanel()`, render headline cards by source
-- [ ] Import in `app.js` and add news intercept block in `onstop` + `handleSend`
-- [ ] Add news panel HTML to `index.html`
-- [ ] Add news panel CSS to `style.css`
-- [ ] Test: "News briefing" → panel opens with headlines + LLM spoken summary of top stories
+- [x] `pip install feedparser`
+- [x] Create `backend/news.py` — `GET /news` endpoint, configurable RSS feed list, 2-minute cache
+- [x] Register `news_router` in `backend/main.py`
+- [x] Add `NEWS_FEEDS` (comma-separated RSS URLs), `NEWS_MAX_ITEMS`, `NEWS_CACHE_SECONDS` to `.env`
+- [x] Create `frontend/news-panel.js` — `detectNewsTrigger()`, `openNewsPanel()`, render headline cards by source
+- [x] Import in `app.js` and add news intercept block in `onstop` + `handleSend`
+- [x] Add news panel HTML to `index.html`
+- [x] Add news panel CSS to `style.css`
+- [x] Test: "News briefing" → panel opens with headlines + LLM spoken summary of top stories
 
 #### Enhancement — Category-Filtered News Queries 🟡
 

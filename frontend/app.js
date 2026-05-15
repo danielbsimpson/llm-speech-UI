@@ -1,6 +1,7 @@
 // ── Imports ───────────────────────────────────────────────────────────────────
 import { detectTimerTrigger, handleTimerTrigger, initTimerPanel, dismissTimerPanel } from './timer-panel.js';
 import { detectWeatherTrigger, openWeatherPanel, closeWeatherPanel } from './weather-panel.js';
+import { detectNewsTrigger, openNewsPanel, closeNewsPanel } from './news-panel.js';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const BACKEND_BASE = 'http://localhost:8000';
@@ -200,6 +201,24 @@ function exitPresMode() {
   presTitle.textContent  = 'SUBJECT UNKNOWN';
   presBody.textContent   = 'Awaiting intelligence data. No records on file for this subject.';
   presMeta.innerHTML     = _DOSSIER_PLACEHOLDER_META;
+}
+
+function enterNewsMode() {
+  starlingEl.classList.add('news-mode');
+}
+
+function exitNewsMode() {
+  starlingEl.classList.remove('news-mode');
+  closeNewsPanel();
+}
+
+/** Returns a fresh local date/time string for injecting into LLM context at request time. */
+function _currentTimeContext() {
+  const now  = new Date();
+  const date = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const time = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  const tz   = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return `[CURRENT LOCAL TIME: ${date} at ${time} (${tz})]`;
 }
 
 // Build a context block injected at the top of the system prompt on every boot.
@@ -491,6 +510,17 @@ function _dismissClockPanel(instantly = true) {
     clockPanel.classList.add('dismissing');
     setTimeout(() => clockPanel.classList.add('hidden'), 800);
   }
+}
+
+/**
+ * Dismiss all tool panels at once (Issue #11 — prevents overlapping panels).
+ * Call this at the start of every tool intercept and at the start of a normal LLM request.
+ */
+function dismissAllToolPanels() {
+  _dismissClockPanel();
+  dismissTimerPanel();
+  closeWeatherPanel();
+  exitNewsMode();
 }
 
 /**
@@ -1252,9 +1282,8 @@ async function handleSend() {
   if (!text) return;
   _rttStart = performance.now();            // start RTT clock for text-input path
   clearAudioQueue();  // stop any in-progress speech before new request
-  _dismissClockPanel();
   textInput.value = '';
-  closeWeatherPanel();
+  dismissAllToolPanels();
 
   // ── Presentation mode intercept ──────────────────────────────────────────
   if (_matchesExitPhrase(text)) {
@@ -1313,11 +1342,37 @@ async function handleSend() {
     fetchSystemStatus();
     return;
   }
+  // ── News briefing intercept ─────────────────────────────────────────────────
+  if (detectNewsTrigger(text)) {
+    dismissAllToolPanels();
+    setState('thinking');
+    appendMessage('user', text);
+    const newsContext = await openNewsPanel();
+    if (newsContext) {
+      enterNewsMode();
+      await sendToOllama(
+        'Deliver a concise spoken news briefing based on the headlines provided. ' +
+        'Pick the four or five most significant stories and summarise each in one sentence. ' +
+        'Group related stories naturally if they appear. ' +
+        'Keep the whole briefing under sixty seconds when spoken aloud. ' +
+        'Do not read source names aloud unless they add important context.',
+        {
+          ephemeralMessages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'system', content: `${_currentTimeContext()}\n${newsContext}` },
+          ],
+        }
+      );
+    } else {
+      await sendToOllama('Inform the user that the news feeds could not be reached right now. One sentence.');
+    }
+    fetchSystemStatus();
+    return;
+  }
   // ────────────────────────────────────────────────────────────────────────
 
   appendMessage('user', text);
-  dismissTimerPanel();
-  closeWeatherPanel();
+  dismissAllToolPanels();
   await sendToOllama(text);
   fetchSystemStatus();
 }
@@ -1331,9 +1386,7 @@ textInput.addEventListener('input', _dismissClockPanel);
 // ── Clear conversation ────────────────────────────────────────────────────────
 clearBtn.addEventListener('click', () => {
   clearAudioQueue();
-  _dismissClockPanel();
-  dismissTimerPanel();
-  closeWeatherPanel();
+  dismissAllToolPanels();
   exitPresMode();
   conversationHistory = [{ role: 'system', content: SYSTEM_PROMPT }];
   chatInner.innerHTML = '';
@@ -1380,7 +1433,7 @@ async function startRecording() {
         const { transcript } = await r.json();
         if (!transcript) { setState('idle'); return; }
 
-        closeWeatherPanel();
+        // dismiss any open tool panel before routing the new transcript
         // ── Presentation mode intercept ──────────────────────────────────
         if (_matchesExitPhrase(transcript)) {
           exitPresMode();
@@ -1439,14 +1492,40 @@ async function startRecording() {
           fetchSystemStatus();
           return;
         }
-        // ────────────────────────────────────────────────────────────────
+        // ── News briefing intercept ───────────────────────────────────────────
+        if (detectNewsTrigger(transcript)) {
+          dismissAllToolPanels();
+          setState('thinking');
+          appendMessage('user', transcript);
+          const newsContext = await openNewsPanel();
+          if (newsContext) {
+            enterNewsMode();
+            await sendToOllama(
+              'Deliver a concise spoken news briefing based on the headlines provided. ' +
+              'Pick the four or five most significant stories and summarise each in one sentence. ' +
+              'Group related stories naturally if they appear. ' +
+              'Keep the whole briefing under sixty seconds when spoken aloud. ' +
+              'Do not read source names aloud unless they add important context.',
+              {
+                ephemeralMessages: [
+                  { role: 'system', content: SYSTEM_PROMPT },
+                  { role: 'system', content: `${_currentTimeContext()}\n${newsContext}` },
+                ],
+              }
+            );
+          } else {
+            await sendToOllama('Inform the user that the news feeds could not be reached right now. One sentence.');
+          }
+          fetchSystemStatus();
+          return;
+        }
+        // ─────────────────────────────────────────────────────────────────────
 
         appendMessage('user', transcript);
         const rttSnap = _rttStart;      // preserve timestamp set in stopRecording()
         clearAudioQueue();              // stop any in-progress speech — resets _rttStart
         _rttStart = rttSnap;            // restore so RTT is measured from mic release
-        dismissTimerPanel();
-        closeWeatherPanel();
+        dismissAllToolPanels();
         await sendToOllama(transcript);
         fetchSystemStatus();
       } catch (err) {

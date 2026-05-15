@@ -20,3 +20,6 @@ rank-bm25>=0.2.2
 # onnxruntime package overwriting the GPU one. Do not reorder these lines.
 # Install order: pip install onnxruntime-gpu  →  then pip install fastembed
 fastembed>=0.3.0
+
+# News briefing (Tool 4)
+feedparser>=6.0.11
