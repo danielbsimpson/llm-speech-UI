@@ -139,10 +139,6 @@ llm-speech-UI/
 │   └── dossier_descriptions/       # Structured subject profiles (.md files)
 ├── markdown/               # Implementation guides for planned and completed features
 │   ├── TODO.md             # Full phased build checklist (Phases 1–11)
-│   ├── TIME.md             # Tool: time & date queries
-│   ├── TIMER.md            # Tool: voice-activated timers
-│   ├── WEATHER.md          # Tool: weather forecast panel
-│   ├── NEWS.md             # Tool: news briefing panel
 │   ├── STOCKS.md           # Tool: stocks & crypto panel
 │   ├── WAKE_WORD.md        # Tool: wake word ("Hey Starling") + interrupt
 │   ├── WEBCALL.md          # Tool: in-UI browser panel
@@ -153,7 +149,11 @@ llm-speech-UI/
 │   ├── GMAIL.md            # Tool: Gmail inbox & summarisation
 │   └── complete/           # Guides for already-implemented features
 │       ├── IDEAS.md        # (general improvement brainstorm log)
-│       └── RAG_IMPLEMENTATION.md
+│       ├── RAG_IMPLEMENTATION.md
+│       ├── TIME.md             # Tool: time & date queries
+│       ├── TIMER.md            # Tool: voice-activated timers
+│       ├── WEATHER.md          # Tool: weather forecast panel
+│       └── NEWS.md             # Tool: news briefing panel
 ├── scripts/
 │   ├── setup.sh                # One-shot install script
 │   ├── download_models.py      # Download Kokoro model files
