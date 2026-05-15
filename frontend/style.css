@@ -242,6 +242,42 @@ html, body {
   padding: 4px 0;
 }
 
+/* ── Weather-mode layout (col-left shrinks to column; weather panel fills the right) */
+.starling.weather-mode .col-left {
+  width: 37%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: 16px;
+  transform: none;
+  overflow: hidden;
+}
+.starling.weather-mode .col-left .ring-section {
+  width: auto;
+}
+.starling.weather-mode .ring-section {
+  transform: translateY(-10px);
+  transition: transform 0.5s ease;
+}
+.starling.weather-mode .col-left .chat-panel {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  max-height: none;
+  opacity: 0.85;
+}
+.starling.weather-mode .col-left .msg {
+  font-size: 10px;
+  line-height: 1.45;
+  padding: 4px 0;
+}
+/* Weather panel expands to fill the right side, mirroring pres-panel/dossier */
+.starling.weather-mode .weather-panel {
+  width: 58%;
+  margin-left: 1%;
+  animation: weatherFadeIn 0.35s ease;
+}
+
 /* ── Dossier text styles ────────────────────────────────────────────────── */
 .pres-dossier-title {
   font-family: 'Share Tech Mono', monospace;
@@ -934,14 +970,14 @@ html, body {
 /* ── Weather Panel ──────────────────────────────────────────────────────────── */
 
 .weather-panel {
-  width: 100%;
+  flex-shrink: 0;
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
   padding: 18px 20px 14px;
-  margin-top: 12px;
-  animation: weatherFadeIn 0.35s ease;
-  overflow: hidden;
+  box-sizing: border-box;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .weather-panel.hidden {

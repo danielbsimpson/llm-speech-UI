@@ -81,10 +81,12 @@ def _parse_feed(url: str) -> list[dict]:
             summary = summary[:280].rsplit(" ", 1)[0] + "\u2026"
 
         pub_raw = entry.get("published", entry.get("updated", ""))
-        pub = ""
+        pub    = ""
+        pub_ts = 0.0
         try:
             from email.utils import parsedate_to_datetime
             pub_dt = parsedate_to_datetime(pub_raw)
+            pub_ts = pub_dt.timestamp()
             today  = datetime.now(timezone.utc).date()
             pub    = pub_dt.strftime("%H:%M") if pub_dt.date() == today else pub_dt.strftime("%b %-d")
         except Exception:
@@ -99,6 +101,7 @@ def _parse_feed(url: str) -> list[dict]:
             "source":  source,
             "link":    link,
             "pub":     pub,
+            "pub_ts":  pub_ts,
         })
 
     return items
@@ -139,6 +142,9 @@ async def get_news():
             if item["id"] not in seen_ids:
                 seen_ids.add(item["id"])
                 all_items.append(item)
+
+    # Sort newest-first; items with no parseable timestamp fall to the bottom
+    all_items.sort(key=lambda h: h["pub_ts"], reverse=True)
 
     # Group by source for the frontend tab filter
     by_source: dict[str, list] = {}

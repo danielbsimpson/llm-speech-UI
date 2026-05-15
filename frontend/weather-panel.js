@@ -4,6 +4,7 @@
 const BACKEND_BASE_WX = 'http://localhost:8000';
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
+const _starlingEl = document.getElementById('starling');
 const wxPanel     = document.getElementById('weather-panel');
 const wxLocation  = document.getElementById('weather-location');
 const wxFetched   = document.getElementById('weather-fetched');
@@ -91,6 +92,7 @@ export async function openWeatherPanel(locationOverride = null) {
 
   _renderPanel(data);
   wxPanel.classList.remove('hidden');
+  _starlingEl.classList.add('weather-mode');
   wxPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
   // Update footer badge
@@ -100,12 +102,16 @@ export async function openWeatherPanel(locationOverride = null) {
   clearTimeout(_autoDismissTimer);
   _autoDismissTimer = setTimeout(closeWeatherPanel, 30_000);
 
-  return data.llm_context;
+  // Append retrieval time to the LLM context so the model knows when the data was fetched
+  const fetchedDate = new Date(data.fetched_at);
+  const timeStr = fetchedDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  return `${data.llm_context} [Weather data retrieved at ${timeStr} local time.]`;
 }
 
 export function closeWeatherPanel() {
   clearTimeout(_autoDismissTimer);
   _autoDismissTimer = null;
+  _starlingEl.classList.remove('weather-mode');
   wxPanel.classList.add('hidden');
 }
 
