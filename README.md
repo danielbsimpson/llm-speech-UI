@@ -27,6 +27,7 @@ Microphone → Speech-to-Text → llama-server (LLM on GPU) → Text-to-Speech �
 - 🕒 **Time & date queries** — instant voice responses ("what time is it?", "what day is it?") with a live clock panel; zero backend, sub-200 ms
 - ⏱️ **Voice-activated timers** — set, cancel, and list multiple named timers entirely in-browser; Web Audio API chime on completion
 - 🌤️ **Weather panel** — say "what's the weather?" to open a 7-day forecast panel sourced from Open-Meteo (free, no API key); LLM delivers a spoken conditions summary
+- 📰 **News briefing panel** — say "what's the news?" to open a live headlines panel sourced from configurable RSS feeds; LLM delivers a spoken multi-story briefing
 
 **Presentation / dossier mode:**
 
@@ -46,6 +47,10 @@ Microphone → Speech-to-Text → llama-server (LLM on GPU) → Text-to-Speech �
 
 ![S.T.A.R.L.I.N.G. Weather Panel](assets/images/weather_example.png)
 
+**News panel:**
+
+![S.T.A.R.L.I.N.G. News Panel](assets/images/news_example.png)
+
 ---
 
 ## Planned Tool Kit (Phase 11)
@@ -56,10 +61,10 @@ Full implementation guides live in the [`markdown/`](./markdown/) folder.
 
 | # | Tool | Guide | Backend | Status |
 |---|---|---|---|---|
-| 1 | Time & Date | [`markdown/TIME.md`](./markdown/complete/TIME.md) | None | ✅ Done |
-| 2 | Timers | [`markdown/TIMER.md`](./markdown/complete/TIMER.md) | None | ✅ Done |
-| 3 | Weather | [`markdown/WEATHER.md`](./markdown/complete/WEATHER.md) | Open-Meteo (free, no key) | ✅ Done |
-| 4 | News Briefing | [`markdown/NEWS.md`](./markdown/NEWS.md) | RSS / feedparser (free) | 🔲 Planned |
+| 1 | Time & Date | [`markdown/complete/TIME.md`](./markdown/complete/TIME.md) | None | ✅ Done |
+| 2 | Timers | [`markdown/complete/TIMER.md`](./markdown/complete/TIMER.md) | None | ✅ Done |
+| 3 | Weather | [`markdown/complete/WEATHER.md`](./markdown/complete/WEATHER.md) | Open-Meteo (free, no key) | ✅ Done |
+| 4 | News Briefing | [`markdown/complete/NEWS.md`](./markdown/complete/NEWS.md) | RSS / feedparser (free) | ✅ Done |
 | 5 | Stocks & Crypto | [`markdown/STOCKS.md`](./markdown/STOCKS.md) | yfinance (unofficial) | 🔲 Planned |
 | 6 | Wake Word & Interrupt | [`markdown/WAKE_WORD.md`](./markdown/WAKE_WORD.md) | None | 🔲 Planned |
 | 7 | In-UI Browser Panel | [`markdown/WEBCALL.md`](./markdown/WEBCALL.md) | None | 🔲 Planned |
@@ -366,9 +371,9 @@ WEATHER_UNITS=fahrenheit
 WEATHER_CACHE_SECONDS=600
 
 # News (Tool 4)
-# NEWS_FEEDS=https://feeds.bbci.co.uk/news/rss.xml,https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml
-# NEWS_MAX_ITEMS=10
-# NEWS_CACHE_SECONDS=120
+NEWS_FEEDS=https://feeds.bbci.co.uk/news/rss.xml,https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml
+NEWS_MAX_ITEMS=10
+NEWS_CACHE_SECONDS=120
 
 # Stocks (Tool 5)
 # STOCKS_TICKERS=AAPL,MSFT,NVDA,BTC-USD,ETH-USD
@@ -505,8 +510,8 @@ High-level milestones:
 - [x] LLM metrics bar — prompt tokens, generation speed, time, and context window fill percentage
 - [x] **Voice-triggered dossier / presentation mode** — voice trigger intercept, neon border animation, four-zone layout reconfiguration, manifest-driven image + structured text loading, LLM auto-briefing via sentence-chunked TTS
 - [x] **RAG memory system** — ChromaDB + BM25/vector fusion; `make rag-ingest` indexes any `.md`/`.txt` files dropped into `memory/input/`
-- [x] **Phase 11 (Tools 1–3)** — Time & date panel, voice-activated timers, and weather forecast panel with Open-Meteo integration
-- [ ] **Phase 11 (Tools 4–12)** — News briefing, stocks, wake word, browser panel, ideas tracker, journal, Wikipedia RAG, Google Calendar, Gmail; see [`markdown/`](./markdown/) for implementation guides
+- [x] **Phase 11 (Tools 1–4)** — Time & date panel, voice-activated timers, weather forecast panel with Open-Meteo integration, and news briefing panel with RSS feed aggregation
+- [ ] **Phase 11 (Tools 5–12)** — Stocks, wake word, browser panel, ideas tracker, journal, Wikipedia RAG, Google Calendar, Gmail; see [`markdown/`](./markdown/) for implementation guides
 - [ ] Electron desktop app packaging
 - [ ] GraphRAG knowledge graph memory
 
