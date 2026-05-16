@@ -1639,3 +1639,259 @@ a.news-story-source-title:hover {
   line-height: 1.45;
   padding: 4px 0;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/* ── Market Panel (Tool 5 — Stocks & Crypto) ──────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
+.mkt-panel {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 16px 20px 14px;
+  margin-top: 12px;
+  animation: weatherFadeIn 0.35s ease;  /* reuses existing keyframe */
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mkt-panel.hidden {
+  display: none;
+}
+
+.mkt-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: 8px;
+}
+
+.mkt-title {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: clamp(0.75rem, 1.4vw, 0.95rem);
+  color: #e0e0e0;
+  letter-spacing: 0.14em;
+}
+
+.mkt-status {
+  font-size: 0.62rem;
+  font-family: 'Share Tech Mono', monospace;
+  letter-spacing: 0.1em;
+}
+
+.mkt-status[data-open="true"]  { color: #88ffaa; }
+.mkt-status[data-open="false"] { color: #ff8888; }
+
+/* Filter tabs */
+.mkt-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.mkt-tab {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 5px;
+  color: #777;
+  cursor: pointer;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  padding: 3px 9px;
+  text-transform: uppercase;
+  transition: background 0.15s, color 0.15s;
+}
+
+.mkt-tab:hover  { background: rgba(255,255,255,0.08); color: #ccc; }
+.mkt-tab.active { background: rgba(255,255,255,0.10); border-color: rgba(255,255,255,0.2); color: #e0e0e0; }
+
+/* Ticker grid */
+.mkt-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.mkt-empty {
+  font-size: 0.7rem;
+  color: #444;
+  padding: 4px 0;
+  grid-column: 1 / -1;
+}
+
+/* Ticker cards with entrance animation (mirrors newsCardIn) */
+.mkt-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 7px;
+  transition: background 0.12s;
+  animation: newsCardIn 0.28s ease both;
+  animation-delay: var(--card-delay, 0ms);
+}
+
+.mkt-card:hover { background: rgba(255, 255, 255, 0.05); }
+
+.mkt-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.mkt-card-symbol {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.78rem;
+  color: #e0e0e0;
+  letter-spacing: 0.06em;
+}
+
+.mkt-card-type {
+  font-size: 0.52rem;
+  color: #555;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding-top: 2px;
+}
+
+.mkt-card-price {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: clamp(0.9rem, 2vw, 1.15rem);
+  color: #ffffff;
+  line-height: 1;
+}
+
+.mkt-card-change {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.72rem;
+}
+
+.mkt-card-change[data-direction="up"]   { color: #88ffaa; }
+.mkt-card-change[data-direction="down"] { color: #ff8888; }
+.mkt-card-change[data-direction="flat"] { color: #888;    }
+
+.mkt-card-name {
+  font-size: 0.62rem;
+  color: #555;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mkt-card-52w {
+  font-size: 0.6rem;
+  color: #444;
+  margin-top: 2px;
+}
+
+/* Footer */
+.mkt-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding-top: 8px;
+}
+
+.mkt-refresh-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 5px;
+  color: #777;
+  cursor: pointer;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  padding: 4px 10px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.mkt-refresh-btn:hover { background: rgba(255,255,255,0.08); color: #bbb; }
+
+.mkt-fetched {
+  font-size: 0.58rem;
+  color: #444;
+  letter-spacing: 0.08em;
+}
+
+/* ── Mkt-mode layout (mirrors news-mode exactly) ─────────────────────────── */
+
+.body-cols > .mkt-panel {
+  flex-shrink: 0;
+  width: 0;
+  overflow: hidden;
+  opacity: 0;
+  margin-top: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  animation: none;
+  box-sizing: border-box;
+  transition: width 0.5s ease, opacity 0.4s ease 0.3s, padding 0.5s ease;
+}
+
+/* Keep display:flex so width transition works (overrides .hidden display:none) */
+.body-cols > .mkt-panel.hidden {
+  display: flex;
+}
+
+/* Expand panel and restore visual styles in mkt-mode */
+.starling.mkt-mode .body-cols > .mkt-panel {
+  width: 60%;
+  opacity: 1;
+  padding: 20px 20px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  margin-left: 1%;
+  overflow: hidden;
+}
+
+.starling.mkt-mode .body-cols > .mkt-panel .mkt-grid {
+  max-height: none;
+  flex: 1;
+}
+
+/* col-left shrinks to a narrow column */
+.starling.mkt-mode .col-left {
+  width: 37%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: 16px;
+  transform: none;
+  overflow: hidden;
+}
+
+.starling.mkt-mode .col-left .ring-section {
+  width: auto;
+}
+
+.starling.mkt-mode .ring-section {
+  transform: translateY(-10px);
+  transition: transform 0.5s ease;
+}
+
+.starling.mkt-mode .col-left .chat-panel {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  max-height: none;
+  opacity: 0.85;
+}
+
+.starling.mkt-mode .col-left .msg {
+  font-size: 10px;
+  line-height: 1.45;
+  padding: 4px 0;
+}

@@ -145,6 +145,25 @@
         </div>
       </div>
 
+      <!-- Market Panel — zero-width in normal mode, expands in mkt-mode -->
+      <div class="mkt-panel hidden" id="mkt-panel">
+        <div class="mkt-header">
+          <div class="mkt-title">MARKET WATCH</div>
+          <div class="mkt-status" id="mkt-status">—</div>
+        </div>
+        <div class="mkt-tabs">
+          <button class="mkt-tab active" data-filter="all">ALL</button>
+          <button class="mkt-tab" data-filter="equity">STOCKS</button>
+          <button class="mkt-tab" data-filter="crypto">CRYPTO</button>
+          <button class="mkt-tab" data-filter="index">INDICES</button>
+        </div>
+        <div class="mkt-grid" id="mkt-grid"></div>
+        <div class="mkt-footer">
+          <button class="mkt-refresh-btn" id="mkt-refresh-btn">↻ REFRESH</button>
+          <span class="mkt-fetched" id="mkt-fetched">—</span>
+        </div>
+      </div>
+
     </div><!-- /body-cols -->
 
     <!-- Full-width bottom bar: LLM metrics + TTS settings + controls -->
@@ -197,6 +216,7 @@
       <div class="ftr-item">STT <span>Whisper (local)</span><span class="ftr-dev" id="ftr-whisper-dev">—</span></div>
       <div class="ftr-item">TTS <span id="ftr-tts">Kokoro (local)</span><span class="ftr-dev" id="ftr-kokoro-dev">—</span></div>
       <div class="ftr-item">WX <span id="ftr-wx-location">—</span></div>
+      <div class="ftr-item">MKT <span id="ftr-mkt-status" class="ftr-dev">—</span></div>
       <div class="ftr-item">SPACE <span>push-to-talk</span></div>
     </footer>
 

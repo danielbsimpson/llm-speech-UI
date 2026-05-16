@@ -2,6 +2,7 @@
 import { detectTimerTrigger, handleTimerTrigger, initTimerPanel, dismissTimerPanel } from './timer-panel.js';
 import { detectWeatherTrigger, openWeatherPanel, closeWeatherPanel, initWeatherPanel, startWeatherAutoDismiss } from './weather-panel.js';
 import { detectNewsTrigger, openNewsPanel, closeNewsPanel } from './news-panel.js';
+import { detectMarketTrigger, openMarketPanel, closeMarketPanel } from './stocks-panel.js';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const BACKEND_BASE = 'http://localhost:8000';
@@ -215,6 +216,15 @@ function enterNewsMode() {
 function exitNewsMode() {
   starlingEl.classList.remove('news-mode');
   closeNewsPanel();
+}
+
+function enterMarketMode() {
+  starlingEl.classList.add('mkt-mode');
+}
+
+function exitMarketMode() {
+  starlingEl.classList.remove('mkt-mode');
+  closeMarketPanel();
 }
 
 /** Returns a fresh local date/time string for injecting into LLM context at request time. */
@@ -526,6 +536,7 @@ function dismissAllToolPanels() {
   dismissTimerPanel();
   closeWeatherPanel();
   exitNewsMode();
+  exitMarketMode();
 }
 
 /**
@@ -1376,6 +1387,38 @@ async function _routeInput(text) {
       );
     } else {
       await sendToOllama('Inform the user that the news feeds could not be reached right now. One sentence.');
+    }
+    fetchSystemStatus();
+    return;
+  }
+
+  // ── Market / stocks / crypto intercept ───────────────────────────────────────
+  const mktTrigger = detectMarketTrigger(text);
+  if (mktTrigger) {
+    setState('thinking');
+    appendMessage('user', text);
+    const filterMap = { stocks: 'equity', crypto: 'crypto', all: 'all' };
+    const mktContext = await openMarketPanel(filterMap[mktTrigger] ?? 'all');
+    if (mktContext) {
+      enterMarketMode();
+      const focusHint = mktTrigger === 'crypto'
+        ? 'Focus primarily on the cryptocurrency positions.'
+        : mktTrigger === 'stocks'
+          ? 'Focus on the equity and ETF positions.'
+          : 'Cover both equities and crypto briefly.';
+      await sendToOllama(
+        `Deliver a concise spoken market briefing. ${focusHint} ` +
+        'Highlight any significant movers. Keep it under thirty seconds when spoken aloud. ' +
+        'Do not read every ticker — summarise the overall session tone and call out notable moves.',
+        {
+          ephemeralMessages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'system', content: `${_currentTimeContext()}\n${mktContext}` },
+          ],
+        }
+      );
+    } else {
+      await sendToOllama('Inform the user that market data could not be retrieved right now. One sentence.');
     }
     fetchSystemStatus();
     return;

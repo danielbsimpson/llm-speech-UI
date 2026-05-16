@@ -27,7 +27,8 @@ Microphone → Speech-to-Text → llama-server (LLM on GPU) → Text-to-Speech �
 - 🕒 **Time & date queries** — instant voice responses ("what time is it?", "what day is it?") with a live clock panel; zero backend, sub-200 ms
 - ⏱️ **Voice-activated timers** — set, cancel, and list multiple named timers entirely in-browser; Web Audio API chime on completion
 - 🌤️ **Weather panel** — say "what's the weather?" or "weather in Boston" to open a 7-day forecast panel sourced from Open-Meteo (free, no API key); supports named-location queries resolved via Nominatim geocoding with geodesic proximity disambiguation (closest match to your home coordinates); responses are cached to disk with a 1-hour TTL and up to 168 historical snapshots per location; panel shows the resolved location name, cache age, and a 🔄 refresh button; LLM delivers a spoken conditions summary using structured forecast data
-- 📰 **News briefing panel** — say "what's the news?" to open a live headlines panel sourced from configurable RSS feeds; LLM delivers a spoken multi-story briefing
+- 📰 **News briefing panel** — say "what's the news?" to open a live headlines panel sourced from configurable RSS feeds; LLM synthesis runs in the background and patches in story cards when ready; stagger card animation; synthesis spinner indicator
+- 📈 **Stocks & crypto panel** — say "market briefing", "show me crypto", or a specific ticker name ("check NVIDIA") to open a live market data panel powered by Yahoo Finance (`yfinance`); displays price, % change (colour-coded), 52-week range, and market-cap per ticker; market-hours indicator (OPEN/CLOSED); filter tabs for Stocks / Crypto / Indices; LLM delivers a spoken briefing highlighting notable movers; 5-minute cache with manual refresh; panel slides in using the same column-expand layout as the news panel
 
 **Presentation / dossier mode:**
 
@@ -65,7 +66,7 @@ Full implementation guides live in the [`markdown/`](./markdown/) folder.
 | 2 | Timers | [`markdown/complete/TIMER.md`](./markdown/complete/TIMER.md) | None | ✅ Done |
 | 3 | Weather | [`markdown/complete/WEATHER.md`](./markdown/complete/WEATHER.md) | Open-Meteo (free, no key) | ✅ Done |
 | 4 | News Briefing | [`markdown/complete/NEWS.md`](./markdown/complete/NEWS.md) | RSS / feedparser (free) | ✅ Done |
-| 5 | Stocks & Crypto | [`markdown/STOCKS.md`](./markdown/STOCKS.md) | yfinance (unofficial) | 🔲 Planned |
+| 5 | Stocks & Crypto | [`markdown/STOCKS.md`](./markdown/STOCKS.md) | yfinance (unofficial) | ✅ Done |
 | 6 | Wake Word & Interrupt | [`markdown/WAKE_WORD.md`](./markdown/WAKE_WORD.md) | None | 🔲 Planned |
 | 7 | In-UI Browser Panel | [`markdown/WEBCALL.md`](./markdown/WEBCALL.md) | None | 🔲 Planned |
 | 8 | Ideas Tracker | [`markdown/IDEAS_TRACKER.md`](./markdown/IDEAS_TRACKER.md) | Local JSON file | 🔲 Planned |
@@ -384,8 +385,10 @@ NEWS_MAX_ITEMS=10
 NEWS_CACHE_SECONDS=120
 
 # Stocks (Tool 5)
-# STOCKS_TICKERS=AAPL,MSFT,NVDA,BTC-USD,ETH-USD
-# STOCKS_CACHE_SECONDS=300
+STOCKS_WATCHLIST=NVDA,AAPL,MSFT,SPY,QQQ
+CRYPTO_WATCHLIST=BTC-USD,ETH-USD
+STOCKS_CACHE_SECONDS=300
+STOCKS_CURRENCY_SYMBOL=$
 
 # Ideas Tracker (Tool 8)
 # IDEAS_FILE=memory/ideas.json
@@ -454,7 +457,8 @@ To use Whisper, set `STT_ENGINE=whisper` in `.env` and ensure the FastAPI backen
 | `/weather` | GET | Weather forecast + current conditions (Open-Meteo); optional `location` and `force` params |
 | `/weather/history` | GET | Cached historical weather snapshots; optional `location` filter |
 | `/news` | GET | News headlines (RSS) |
-| `/stocks` | GET | Stock / crypto quotes (yfinance) |
+| `/stocks` | GET | Live price data for configured watchlist (equities + crypto); 5-min cache |
+| `/stocks/cache` | DELETE | Bust the stocks cache for an immediate re-fetch |
 | `/ideas/add` | POST | Save a new idea |
 | `/ideas` | GET / DELETE | List or clear all ideas |
 | `/ideas/{id}` | DELETE | Delete one idea by id |
@@ -519,8 +523,8 @@ High-level milestones:
 - [x] LLM metrics bar — prompt tokens, generation speed, time, and context window fill percentage
 - [x] **Voice-triggered dossier / presentation mode** — voice trigger intercept, neon border animation, four-zone layout reconfiguration, manifest-driven image + structured text loading, LLM auto-briefing via sentence-chunked TTS
 - [x] **RAG memory system** — ChromaDB + BM25/vector fusion; `make rag-ingest` indexes any `.md`/`.txt` files dropped into `memory/input/`
-- [x] **Phase 11 (Tools 1–4)** — Time & date panel, voice-activated timers, weather forecast panel with Open-Meteo integration, and news briefing panel with RSS feed aggregation
-- [ ] **Phase 11 (Tools 5–12)** — Stocks, wake word, browser panel, ideas tracker, journal, Wikipedia RAG, Google Calendar, Gmail; see [`markdown/`](./markdown/) for implementation guides
+- [x] **Phase 11 (Tools 1–5)** — Time & date panel, voice-activated timers, weather forecast panel (Open-Meteo), news briefing panel (RSS + background LLM synthesis), and stocks & crypto market panel (Yahoo Finance / yfinance; parallel fetch, filter tabs, OPEN/CLOSED badge, spoken briefing)
+- [ ] **Phase 11 (Tools 6–12)** — Wake word, browser panel, ideas tracker, journal, Wikipedia RAG, Google Calendar, Gmail; see [`markdown/`](./markdown/) for implementation guides
 - [ ] Electron desktop app packaging
 - [ ] GraphRAG knowledge graph memory
 

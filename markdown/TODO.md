@@ -313,7 +313,7 @@ Tools are ordered from lowest to highest disruption to the existing pipeline:
 | 2 | Timers | `TIMER.md` | None | None | 🟢 Trivial |
 | 3 | Weather | `WEATHER.md` | 1 new router file | `httpx` | 🟢 Low |
 | 4 | News Briefing | `NEWS.md` | 1 new router file | `feedparser` | 🟢 Low |
-| 5 | Stocks & Crypto | `STOCKS.md` | 1 new router file | `yfinance` | 🟡 Low-Med |
+| 5 | Stocks & Crypto | `STOCKS.md` | 1 new router file | `yfinance`, `tzdata` | ✅ Done |
 | 6 | Wake Word & Interrupt | `WAKE_WORD.md` | None | None | 🟡 Medium |
 | 7 | In-UI Browser Panel | `WEBCALL.md` | None | None | 🟡 Medium |
 | 8 | Ideas Tracker | `IDEAS_TRACKER.md` | 1 new router file | None | 🟡 Medium |
@@ -598,21 +598,23 @@ NEWS_SYNTHESIS_MAX_HEADLINES=40
 
 ---
 
-### Tool 5 — Stocks & Crypto (`STOCKS.md`) 🟡
+### Tool 5 — Stocks & Crypto (`STOCKS.md`) ✅
 
 > **Guide:** `markdown/STOCKS.md`  
 > **Pipeline risk:** Low-Medium — `yfinance` is an unofficial Yahoo Finance scraper (personal use acceptable). Occasionally breaks when Yahoo changes response format; not suitable for production.
 
 Same intercept and panel pattern as weather and news. No API key required.
 
-- [ ] `pip install yfinance`
-- [ ] Create `backend/stocks.py` — `GET /stocks` endpoint, configurable ticker list, 5-minute cache
-- [ ] Register `stocks_router` in `backend/main.py`
-- [ ] Add `STOCKS_TICKERS` (comma-separated), `STOCKS_CACHE_SECONDS` to `.env`
-- [ ] Create `frontend/stocks-panel.js` — `detectMarketTrigger()`, `openStocksPanel()`, render ticker grid
-- [ ] Import in `app.js` and add stocks intercept block in `onstop` + `handleSend`
-- [ ] Add stocks panel HTML + CSS
-- [ ] Test: "What's the market doing?" → panel + LLM spoken summary of movers
+- [x] `pip install yfinance tzdata` — `yfinance-1.3.0`, `tzdata-2026.2` installed
+- [x] Create `backend/stocks.py` — `GET /stocks` endpoint; parallel ticker fetch via `asyncio.gather + run_in_executor`; 5-minute in-memory cache; `DELETE /stocks/cache`; market-hours detection (`_is_us_market_open`) using `ZoneInfo`; Windows-safe LLM context string
+- [x] Register `stocks_router` in `backend/main.py`
+- [x] Add `STOCKS_WATCHLIST`, `CRYPTO_WATCHLIST`, `STOCKS_CACHE_SECONDS`, `STOCKS_CURRENCY_SYMBOL` to `.env` / `.env.example`
+- [x] Create `frontend/stocks-panel.js` — `detectMarketTrigger()` (returns `'stocks'` / `'crypto'` / `'all'`), `openMarketPanel(filter)`, `closeMarketPanel()`, filter tab wiring, stagger card animation (`--card-delay` CSS variable)
+- [x] Import in `app.js`; add `enterMarketMode()` / `exitMarketMode()`; add market intercept in `_routeInput`; update `dismissAllToolPanels()` to call `exitMarketMode()`
+- [x] Add `.mkt-panel` HTML to `index.html` (inside `.body-cols`, same slot as news panel); add `MKT OPEN/CLOSED` footer badge (`#ftr-mkt-status`)
+- [x] Add market panel CSS + `mkt-mode` layout rules (mirrors `news-mode` — panel slides in at 60% width, `col-left` shrinks to 37%); stagger animation reuses existing `newsCardIn` keyframe
+- [x] Tightened `detectMarketTrigger` — bare "stock" no longer fires the panel; requires a qualifying phrase (e.g. "stock briefing", "market update", specific ticker names like "check NVIDIA")
+- [x] Test: "market briefing" / "show me crypto" / "check NVIDIA" → panel opens + LLM spoken market summary
 
 #### Enhancement — JSON Watchlist File 🟢
 
@@ -781,7 +783,7 @@ Persist every `yfinance` response to a local JSON file on disk. Before calling Y
 
 | Data type | Cache TTL | Rationale |
 |---|---|---|
-| Quote (current price + change) | 24 hours | Markets close daily; stale intraday data is acceptable for a personal dashboard |
+| Quote (current price + change) | 1 hour | Matches the weather cache pattern — fresh enough for a personal dashboard; avoids hammering Yahoo Finance during market hours |
 | History `1d` period | 1 hour | Intraday data changes frequently during market hours |
 | History `1wk` / `1mo` | 24 hours | Daily candles change at most once per market session |
 | History `3mo` / `1y` / `max` | 7 days | Weekly/monthly candles are stable; no need to re-fetch frequently |
@@ -821,6 +823,170 @@ STOCKS_CACHE_FILE=memory/stocks_cache.json
 **`.gitignore` addition**
 
 - [ ] Add `memory/stocks_cache.json` to `.gitignore` — contains personal watchlist pricing data; do not commit
+
+#### Enhancement — Historical Data View with Smart Gap-Fill 🟡
+
+Store historical candle data in `stocks_history.json` once fetched. On every subsequent request for a `(ticker, window)` pair, the backend checks the last stored candle date and fetches only the gap (last stored date → today), appending new candles to the existing series. Users see instant chart renders from stored data; the network call covers only missing time. Supports **7D · 1M · 3M · 6M · 1Y · 5Y · 10Y** windows.
+
+**Time windows and candle intervals**
+
+| Window | yfinance period | Candle interval | Gap re-fetched on request |
+|---|---|---|---|
+| 7D | `7d` | `1h` | Every request (fast-moving intraday) |
+| 1M | `1mo` | `1d` | Daily (one new candle per market session) |
+| 3M | `3mo` | `1d` | Daily |
+| 6M | `6mo` | `1d` | Daily |
+| 1Y | `1y` | `1wk` | Weekly |
+| 5Y | `5y` | `1wk` | Weekly |
+| 10Y | `10y` | `1mo` | Monthly |
+
+**Storage file (`memory/stocks_history.json`)**
+
+```json
+{
+  "AAPL__1y": {
+    "fetched_at": "2026-05-14T14:00:00Z",
+    "interval": "1wk",
+    "candles": [
+      { "t": 1715644800000, "o": 172.30, "h": 179.10, "l": 171.50, "c": 178.20, "v": 58423100 },
+      "..."
+    ]
+  },
+  "BTC-USD__1m": {
+    "fetched_at": "2026-05-14T14:00:00Z",
+    "interval": "1d",
+    "candles": [ "..." ]
+  }
+}
+```
+
+- Key format: `"<ticker>__<window>"` (e.g. `AAPL__1y`, `BTC-USD__3m`)
+- `fetched_at` records when the most recent gap-fill completed
+- `candles` are sorted ascending by `t` (Unix ms UTC); no duplicates
+- Data is **never deleted** from the file — only extended; this passively builds a personal price history archive over time
+
+**Gap-fill algorithm**
+
+1. Load stored series for `(ticker, window)` from `stocks_history.json`
+2. **First request (empty)**: call `yf.Ticker(t).history(period=yf_period, interval=interval)` for the full range; store; return
+3. **Subsequent request**: read `candles[-1]["t"]` → derive `start_date = last_candle_date + 1 interval unit`
+4. Call `yf.Ticker(t).history(start=start_date, end=datetime.utcnow(), interval=interval)` — fetches only the gap
+5. Deduplicate on `t`, merge new candles into the stored array (append only), re-sort ascending
+6. Update `fetched_at`; save atomically; return the full stored array
+7. If the gap is zero (last candle is today), skip the network call entirely and return from disk
+
+**Backend changes (`backend/stocks.py`)**
+
+- [ ] Add `STOCKS_HISTORY_FILE` to `.env` / `.env.example` (default: `memory/stocks_history.json`)
+- [ ] On startup, create `stocks_history.json` if absent (seed: `{}`)
+- [ ] Write `load_history_cache() -> dict` and `save_history_cache(cache: dict)` — atomic write via `.tmp` + `os.replace` (same pattern as quote cache)
+- [ ] Write `_gap_fill(ticker, window) -> list[dict]` implementing the algorithm above; maps `window` → `(yf_period, interval)` via a lookup table
+- [ ] Update `GET /stocks/history?ticker=&window=` to use `_gap_fill()`; response includes `"source": "cache"` (no new candles) or `"source": "gap_fill"` (new candles appended) so the frontend can show a freshness label
+- [ ] On the first response for a ticker, fire a `BackgroundTask` that pre-fills all other windows for that ticker in ascending cost order (`7d → 1m → 3m → 6m → 1y → 5y → 10y`) — so subsequent window switches are instant
+- [ ] Add `DELETE /stocks/history?ticker=&window=` — omit `window` to clear all windows for that ticker; omit both to wipe the entire file (useful for forced re-fetch)
+
+**Frontend changes (`frontend/stocks-panel.js`)**
+
+- [ ] Window selector pill strip labels: `7D · 1M · 3M · 6M · 1Y · 5Y · 10Y`; map to backend `window` values `7d · 1m · 3m · 6m · 1y · 5y · 10y`
+- [ ] Show `"Loading…"` placeholder on first chart open for a ticker while the full-period fetch runs; subsequent opens for the same ticker render from gap-filled disk data and feel instant
+- [ ] Display `"Updated <relative time>"` label below the chart sourced from the `fetched_at` field (e.g. "Updated 3 hr ago")
+
+#### Enhancement — Clickable Tile Detail View 🟡
+
+Any ticker card in the market grid is clickable. Clicking it slides the grid out of view and renders a full-width detail pane inside `.mkt-panel` showing an interactive Chart.js line chart for that ticker, a time window pill strip, a stats strip, and a "Hear Briefing" button. The Back button returns to the grid.
+
+**Detail view layout**
+
+```
+┌──────────────────────────────────────────────────────┐
+│  ← Back    AAPL — Apple Inc.       $213.45 ▲ +0.58%  │
+├──────────────────────────────────────────────────────┤
+│  [ 7D ][ 1M ][ 3M ][ 6M ][ 1Y ][ 5Y ][ 10Y ]        │
+├──────────────────────────────────────────────────────┤
+│                                                      │
+│                  Line chart (Chart.js)               │
+│          ← crosshair tooltip: date + OHLCV →         │
+│                                                      │
+├──────────────────────────────────────────────────────┤
+│  52W High: $245.50  │  52W Low: $164.08  │  Vol: 58M │
+│  Mkt Cap: $3.2T     │  P/E: 34.2         │  Yield: — │
+│               [ ♪ Hear Briefing ]                    │
+└──────────────────────────────────────────────────────┘
+```
+
+**Frontend changes (`frontend/stocks-panel.js`)**
+
+- [ ] Add `data-symbol` attribute to each `.mkt-card` at render time; bind a `click` handler that calls `openDetailView(symbol)`
+- [ ] `openDetailView(symbol)`: hide `.mkt-grid`; show `.mkt-detail`; populate header (symbol, full name, current price, % change chip); load chart for default window `1M`; populate stats strip from the cached `GET /stocks` data
+- [ ] `closeDetailView()`: hide `.mkt-detail`; restore `.mkt-grid`; destroy the active Chart.js instance to free canvas memory; called by Back button and `closeMarketPanel()`
+- [ ] Chart.js area/line chart in `#mkt-detail-canvas`:
+  - Lazy-load Chart.js and `chartjs-adapter-date-fns` on first `openDetailView()` call (dynamic `import()` or injected `<script>`) so they have zero impact on initial page load
+  - Line colour: green (`#4ade80`) on positive session, red (`#f87171`) on negative; area fill: semi-transparent tint of the line colour at 0.08 opacity
+  - X-axis: `type: "time"`; labels auto-formatted based on window (`7D` → hours, `1M–6M` → day/month, `1Y–10Y` → month/year)
+  - Y-axis: price-formatted ticks; no currency prefix for index tickers (`^` prefix)
+  - Custom crosshair: vertical hairline follows cursor via `afterDraw` plugin hook; tooltip card shows `Date`, `Close`, `Open`, `High`, `Low`, `Volume`
+- [ ] Window pill click: call `GET /stocks/history?ticker=<symbol>&window=<w>`; swap chart data via `chart.data.datasets[0].data = newPoints; chart.update('active')`; update the "Updated" timestamp label
+- [ ] Stats strip: populated from `fast_info` fields already in `GET /stocks` response (52W high/low, volume, market cap); extend with `yf.Ticker().info` fields (P/E, dividend yield) if available — backend can optionally include these in the `GET /stocks` response
+- [ ] `Escape` key while detail view is open calls `closeDetailView()`
+- [ ] On panel `resize` event: call `chart.resize()` so the canvas fills the updated panel dimensions
+
+**CSS additions (`style.css`)**
+
+- [ ] `.mkt-detail` — `display: none; flex-direction: column; width: 100%; height: 100%;` — toggled with `.mkt-grid` (one visible at a time)
+- [ ] `.mkt-detail-header` — flex row; Back button `←` far left; symbol + full name centre-left; price + change chip far right
+- [ ] `.mkt-window-pills` — pill strip styled identically to existing `.mkt-tabs`; active pill `background: #fff; color: #000`
+- [ ] `#mkt-detail-canvas` — `flex: 1; min-height: 0;` so it fills remaining panel height after header + pills + stats
+- [ ] `.mkt-stats-strip` — 3-column CSS grid; small monospace key/value pairs; muted text; full-width top separator border
+- [ ] `.mkt-hear-btn` — full-width action button at base of stats strip; same visual style as `.mkt-refresh-btn`
+- [ ] On small viewports (< 600 px): hide the stats strip secondary row (P/E, yield); scale chart font sizes down
+
+#### Enhancement — LLM Ticker Briefing on Tile Expand 🟢
+
+When the detail view opens for a ticker, the backend computes a rich context string from stored historical candles and current quote data. The frontend feeds this context to the existing `sendToOllama()` call, producing a 2–3 sentence spoken briefing that plays automatically as the chart loads. A "Hear Briefing" button re-triggers it at any time; changing the time window re-triggers it for the new period.
+
+**Context builder inputs (all computed from stored data — no extra yfinance calls unless history cache is empty)**
+
+- Current price and today's % change (direction, OPEN/CLOSED/AFTER-HOURS status)
+- 52-week high and low; % distance current price is from the 52W high
+- Historical performance over the selected window: % change from first stored candle to last stored candle
+- Peak close and date within the window; trough close and date
+- S&P 500 (`^GSPC`) % change over the same window — market benchmark comparison
+- Over/under-performance delta: `ticker_pct_change − sp500_pct_change`
+
+**LLM prompt template (filled server-side in `GET /stocks/briefing`)**
+
+```
+You are a financial data narrator for a personal stock dashboard.
+Deliver a concise spoken briefing (2–3 sentences, max 60 words) for {TICKER} ({FULL_NAME}).
+
+Context:
+- Current price: {PRICE} ({PCT_TODAY}% today, market is {STATUS})
+- Over the past {WINDOW_LABEL}: {PCT_WINDOW}% ({FIRST_PRICE} → {LAST_PRICE})
+- 52W range: ${LOW_52W} – ${HIGH_52W}; currently {PCT_FROM_HIGH}% below 52W high
+- Window peak: ${PEAK_CLOSE} on {PEAK_DATE}; trough: ${TROUGH_CLOSE} on {TROUGH_DATE}
+- S&P 500 over same period: {SP500_PCT}% — ticker is {OVER/UNDER}performing the market by {DELTA}%
+
+Do not give financial advice. Be factual, conversational, and direct. Avoid filler phrases.
+```
+
+**Backend changes (`backend/stocks.py`)**
+
+- [ ] Add `GET /stocks/briefing?ticker=&window=` endpoint:
+  - Load current quote from quote cache (or fetch live if stale)
+  - Load stored candles for `(ticker, window)` from `stocks_history.json`; if absent, call `_gap_fill()` synchronously before building context
+  - Fetch `^GSPC` candles for the same window (from history cache — trigger gap-fill if absent)
+  - Compute all values in the prompt template; handle edge cases (crypto: omit P/E; missing benchmark: omit benchmark sentence)
+  - Return `{ "ticker": str, "window": str, "llm_context": str }` — the caller feeds this directly to `sendToOllama()`
+- [ ] All arithmetic uses `candles[-1]["c"]` (last close) and `candles[0]["c"]` (first close) from the stored array — no rounding surprises from intermediate fetches
+- [ ] If `^GSPC` gap-fill fails (network error): omit the benchmark lines from the prompt rather than returning an error
+- [ ] Handle crypto tickers gracefully: substitute `"Crypto market"` for the benchmark label when `^GSPC` is not a meaningful comparator; or use `BTC-USD` as the crypto benchmark
+
+**Frontend changes (`frontend/stocks-panel.js`)**
+
+- [ ] On `openDetailView(symbol)`: after chart renders, immediately call `GET /stocks/briefing?ticker=<symbol>&window=1m`; on success, call `sendToOllama(data.llm_context, { ephemeralMessages: [...] })` so the briefing speaks automatically as the chart loads
+- [ ] `.mkt-hear-btn` click: re-triggers `GET /stocks/briefing` + `sendToOllama` for the currently active window; disable button + show spinner while fetching; re-enable on completion
+- [ ] Window pill change: re-trigger the briefing automatically for the new window (the changed period gives meaningfully different context)
+- [ ] If `sendToOllama` is already speaking, queue the new briefing rather than interrupting the current one; cancel the queue if the detail view is closed before it fires
 
 ---
 
