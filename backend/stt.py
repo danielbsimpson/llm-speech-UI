@@ -70,7 +70,7 @@ def _run_transcribe(model: WhisperModel, path: str):
         path,
         language="en",
         vad_filter=True,
-        vad_parameters={"min_silence_duration_ms": 500},
+        vad_parameters={"min_silence_duration_ms": 1500},
     )
     # Materialise the generator — this is where GPU encode actually happens.
     transcript = " ".join(seg.text for seg in segments).strip()

@@ -85,13 +85,18 @@ function _parseTrigger(text) {
 function _matchesExitPhrase(text) {
   const lower = text.toLowerCase();
   const patterns = [
-    /\bclose\b.*\bdossier\b/,
-    /\bexit\b.*\bdossier\b/,
+    /\bclos(?:e|ed)\b.*\bdossier\b/,
+    /\bexit(?:ing)?\b.*\bdossier\b/,
     /\bhide\b.*\bdossier\b/,
+    /\bdismiss\b.*\bdossier\b/,
+    /\bend\b.*\b(?:briefing|dossier|presentation)\b/,
+    /\bstop\b.*\b(?:briefing|dossier)\b/,
+    /\bdossier\b.*\b(?:close|exit|hide|dismiss)\b/,
     /\bgo\s+back\b/,
-    /\bback\s+to\b.*\bchat\b/,
+    /\bback\s+to\b.*\b(?:chat|main)\b/,
     /\bresume\b.*\bchat\b/,
     /\breturn\b.*\bchat\b/,
+    /\b(?:never\s*mind|nevermind|cancel\s+that)\b/,
   ];
   return patterns.some(p => p.test(lower));
 }
@@ -934,6 +939,9 @@ async function sendToOllama(userText, options = {}) {
 
   const { wrap, txt } = appendMessage('assistant', '');
   wrap.classList.add('streaming');
+  const abortCtrl = new AbortController();
+  _currentAbortCtrl = abortCtrl;
+
   setState('thinking');
 
   try {
@@ -944,6 +952,7 @@ async function sendToOllama(userText, options = {}) {
         model: MODEL,
         messages,
       }),
+      signal: abortCtrl.signal,
     });
     if (!res.ok) throw new Error(`Ollama ${res.status}`);
 
@@ -1052,6 +1061,11 @@ async function sendToOllama(userText, options = {}) {
     return full;
   } catch (err) {
     wrap.classList.remove('streaming');
+    if (err.name === 'AbortError') {
+      // Request deliberately cancelled (new mic press, clear, pres-mode exit) — return silently.
+      setState('idle');
+      return null;
+    }
     txt.textContent = `[Error: ${err.message}]`;
     setState('error');
     setTimeout(() => setState('idle'), 4000);
@@ -1125,6 +1139,7 @@ async function loadVoices() {
 function _sanitiseForTTS(text) {
   return text
     .replace(/S\.T\.A\.R\.L\.I\.N\.G\.?/gi, 'Starling') // acronym → name
+    .replace(/^(?:starling|s\.t\.a\.r\.l\.i\.n\.g\.?)\s*:\s*/i, '') // strip leading "Starling:" speaker prefix
     .replace(/\*\*([^*]*)\*\*/g, '$1')   // **bold**
     .replace(/\*([^*]*)\*/g, '$1')        // *italic*
     .replace(/__([^_]*)__/g, '$1')        // __bold__
@@ -1141,6 +1156,7 @@ let _activeAudio     = null;
 let _playbackChain   = Promise.resolve();  // serial playback queue
 let _audioGeneration = 0;                  // increment on clear to discard stale callbacks
 let _textStreamTimer = null;               // setInterval handle for character-by-character text reveal
+let _currentAbortCtrl = null;              // AbortController for the in-flight LLM fetch
 
 // Eagerly fetch the TTS WAV blob — starts immediately, not when playback is ready
 async function _fetchTTSBlob(text) {
@@ -1250,6 +1266,7 @@ function clearAudioQueue() {
   if (_activeAudio) { _activeAudio.pause(); _activeAudio = null; }
   if (_textStreamTimer !== null) { clearInterval(_textStreamTimer); _textStreamTimer = null; }
   if (window.speechSynthesis) window.speechSynthesis.cancel();
+  if (_currentAbortCtrl) { _currentAbortCtrl.abort(); _currentAbortCtrl = null; }
 }
 
 function _speakBrowser(text) {
@@ -1465,9 +1482,10 @@ function stopRecording() {
 }
 
 // Push-to-talk — mouse
-micBtn.addEventListener('mousedown', startRecording);
-micBtn.addEventListener('mouseup',   stopRecording);
-micBtn.addEventListener('mouseleave', stopRecording);
+// Use document-level mouseup so cursor drift off the button mid-speech does not stop recording.
+let _micMouseDown = false;
+micBtn.addEventListener('mousedown', () => { _micMouseDown = true;  startRecording(); });
+document.addEventListener('mouseup',  () => { if (_micMouseDown) { _micMouseDown = false; stopRecording(); } });
 
 // Push-to-talk — touch
 micBtn.addEventListener('touchstart', e => { e.preventDefault(); startRecording(); });

@@ -109,15 +109,30 @@ export function detectTimerTrigger(transcript) {
   const seconds = _parseDuration(t);
   if (!seconds || seconds <= 0) return null;
 
-  // Optional label: "set a pasta timer for 10 minutes" → label = "pasta"
-  const labelMatch = t.match(
-    /\bset\s+(?:a\s+|an\s+)?(\w+(?:\s+\w+)?)\s+timer\b(?!\s+for\s+(?:a\s+)?\d)/
-  );
+  // Optional label extraction — two strategies:
+
+  // 1. Highest priority: "called/named" suffix — "set a timer for 5 minutes called pasta"
   let label = null;
-  if (labelMatch) {
-    const skip = /^(timer|a|an|the|set|start|new)$/i;
-    const candidate = labelMatch[1].trim();
-    if (!skip.test(candidate)) label = candidate;
+  const calledMatch = t.match(/\b(?:called|named)\s+([a-z][a-z0-9]*(?:\s+[a-z][a-z0-9]*)*)\b/);
+  if (calledMatch) {
+    label = calledMatch[1].trim();
+  }
+
+  // 2. Fallback: "set a pasta timer for 10 minutes" → label = "pasta"
+  // Skip candidates that start with a digit or consist entirely of duration words.
+  if (!label) {
+    const labelMatch = t.match(
+      /\bset\s+(?:a\s+|an\s+)?(\w+(?:\s+\w+)?)\s+timer\b(?!\s+for\s+(?:a\s+)?\d)/
+    );
+    if (labelMatch) {
+      const skip = /^(timer|a|an|the|set|start|new)$/i;
+      const durationWordRe = /^(?:\d+|minute|minutes|second|seconds|hour|hours|min|mins|sec|secs)$/;
+      const candidate = labelMatch[1].trim();
+      const isDurationPhrase = candidate.split(/\s+/).every(w => durationWordRe.test(w));
+      if (!skip.test(candidate) && !isDurationPhrase && !/^\d/.test(candidate)) {
+        label = candidate;
+      }
+    }
   }
 
   return { action: 'set', durationSeconds: seconds, label };
@@ -332,12 +347,15 @@ function _createTimer(totalSeconds, label) {
 
 // ── Timer cancellation ────────────────────────────────────────────────────────
 
-/** Cancel a specific timer by id. */
+/** Cancel or dismiss a specific timer by id. */
 function _cancelTimer(id) {
   const t = _timers.get(id);
-  if (!t) return;
-  clearInterval(t.intervalId);
-  _timers.delete(id);
+  if (t) {
+    // Active timer — stop the interval and remove from state.
+    clearInterval(t.intervalId);
+    _timers.delete(id);
+  }
+  // Always remove the DOM entry (handles both active and completed timers).
   const entry = document.getElementById(`timer-entry-${id}`);
   if (entry) entry.remove();
   if (timerList.children.length === 0) timerPanel.classList.add('hidden');

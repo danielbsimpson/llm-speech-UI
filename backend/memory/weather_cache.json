@@ -227,6 +227,120 @@
         "source": "live",
         "cache_age_seconds": 0
       }
+    },
+    {
+      "fetched_at": "2026-05-16T15:51:15.064367+00:00",
+      "data": {
+        "location": "Framingham, Massachusetts US",
+        "display_name": "Framingham, Massachusetts US",
+        "is_default_location": true,
+        "current": {
+          "condition": "Clear sky",
+          "weather_code": 0,
+          "temp": 71,
+          "feels_like": 68,
+          "humidity": 39,
+          "wind_speed": 12,
+          "wind_dir": "SW",
+          "cloud_cover": 0,
+          "precipitation": 0.0,
+          "is_day": true,
+          "unit_temp": "\u00b0F",
+          "unit_wind": "mph",
+          "unit_precip": "in"
+        },
+        "forecast": [
+          {
+            "day": "Saturday",
+            "date": "2026-05-16",
+            "condition": "Foggy",
+            "weather_code": 45,
+            "high": 76,
+            "low": 43,
+            "precip": 0.0,
+            "wind_max": 13,
+            "sunrise": "05:23",
+            "sunset": "20:00"
+          },
+          {
+            "day": "Sunday",
+            "date": "2026-05-17",
+            "condition": "Light drizzle",
+            "weather_code": 51,
+            "high": 86,
+            "low": 57,
+            "precip": 0.012,
+            "wind_max": 14,
+            "sunrise": "05:22",
+            "sunset": "20:01"
+          },
+          {
+            "day": "Monday",
+            "date": "2026-05-18",
+            "condition": "Overcast",
+            "weather_code": 3,
+            "high": 78,
+            "low": 58,
+            "precip": 0.0,
+            "wind_max": 11,
+            "sunrise": "05:21",
+            "sunset": "20:02"
+          },
+          {
+            "day": "Tuesday",
+            "date": "2026-05-19",
+            "condition": "Overcast",
+            "weather_code": 3,
+            "high": 95,
+            "low": 58,
+            "precip": 0.0,
+            "wind_max": 13,
+            "sunrise": "05:20",
+            "sunset": "20:03"
+          },
+          {
+            "day": "Wednesday",
+            "date": "2026-05-20",
+            "condition": "Moderate showers",
+            "weather_code": 81,
+            "high": 94,
+            "low": 68,
+            "precip": 0.437,
+            "wind_max": 15,
+            "sunrise": "05:19",
+            "sunset": "20:04"
+          },
+          {
+            "day": "Thursday",
+            "date": "2026-05-21",
+            "condition": "Light drizzle",
+            "weather_code": 51,
+            "high": 67,
+            "low": 48,
+            "precip": 0.004,
+            "wind_max": 10,
+            "sunrise": "05:18",
+            "sunset": "20:05"
+          },
+          {
+            "day": "Friday",
+            "date": "2026-05-22",
+            "condition": "Overcast",
+            "weather_code": 3,
+            "high": 60,
+            "low": 50,
+            "precip": 0.0,
+            "wind_max": 10,
+            "sunrise": "05:17",
+            "sunset": "20:06"
+          }
+        ],
+        "llm_context": "WEATHER DATA for Framingham, Massachusetts US\nTODAY (Saturday, May 16, 2026): Clear sky, currently 71\u00b0F (feels like 68\u00b0F), humidity 39%, wind 12 mph SW, cloud cover 0%. Today's high: 76\u00b0F, low tonight: 43\u00b0F. Sunrise 05:23, sunset 20:00.\nUPCOMING \u2014 use these exact high temperatures, do not substitute today's values:\n  TOMORROW (Sunday 2026-05-17): high 86\u00b0F / low 57\u00b0F, Light drizzle, precip 0.012in\n  IN TWO DAYS (Monday 2026-05-18): high 78\u00b0F / low 58\u00b0F, Overcast\n  IN THREE DAYS (Tuesday 2026-05-19): high 95\u00b0F / low 58\u00b0F, Overcast\n  IN FOUR DAYS (Wednesday 2026-05-20): high 94\u00b0F / low 68\u00b0F, Moderate showers, precip 0.437in\n  IN FIVE DAYS (Thursday 2026-05-21): high 67\u00b0F / low 48\u00b0F, Light drizzle, precip 0.004in\n  IN SIX DAYS (Friday 2026-05-22): high 60\u00b0F / low 50\u00b0F, Overcast",
+        "fetched_at": "2026-05-16T15:51:15.064367+00:00",
+        "units": "fahrenheit",
+        "source": "live",
+        "cache_age_seconds": 0
+      }
     }
   ],
   "40.71_-74.01": [
