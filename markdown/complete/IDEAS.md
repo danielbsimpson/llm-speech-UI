@@ -1,4 +1,4 @@
-﻿# S.T.A.R.L.I.N.G. — Improvement Ideas
+# S.T.A.R.L.I.N.G. — Improvement Ideas
 
 A running log of planned enhancements, each with enough detail to roll out independently.
 

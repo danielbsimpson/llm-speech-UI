@@ -3,6 +3,7 @@ import { detectTimerTrigger, handleTimerTrigger, initTimerPanel, dismissTimerPan
 import { detectWeatherTrigger, openWeatherPanel, closeWeatherPanel, initWeatherPanel, startWeatherAutoDismiss } from './weather-panel.js';
 import { detectNewsTrigger, openNewsPanel, closeNewsPanel } from './news-panel.js';
 import { detectMarketTrigger, openMarketPanel, closeMarketPanel, setSendToOllama as _setMktSendToOllama, setOnClose as _setMktOnClose } from './stocks-panel.js';
+import { detectBrowserTrigger, detectBrowserClose, isBrowserPanelOpen, openBrowserPanel, closeBrowserPanel } from './browser-panel.js';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const BACKEND_BASE = 'http://localhost:8000';
@@ -537,6 +538,7 @@ function dismissAllToolPanels() {
   closeWeatherPanel();
   exitNewsMode();
   exitMarketMode();
+  closeBrowserPanel();
 }
 
 /**
@@ -1296,7 +1298,18 @@ function _speakBrowser(text) {
 // Handles all trigger intercepts; falls through to the LLM for unmatched input.
 // Called by both handleSend (text path) and mediaRecorder.onstop (voice path).
 async function _routeInput(text) {
+  const _wasBrowserOpen = isBrowserPanelOpen();
   dismissAllToolPanels();
+
+  // ── Browser close phrase ────────────────────────────────────────────────────
+  if (_wasBrowserOpen && detectBrowserClose(text)) {
+    appendMessage('user', text);
+    const ack = 'Browser closed.';
+    const { txt } = appendMessage('assistant', ack);
+    enqueueSpeak(ack, () => { txt.textContent = ack; });
+    setState('idle');
+    return;
+  }
 
   if (_matchesExitPhrase(text)) {
     exitPresMode();
@@ -1420,6 +1433,24 @@ async function _routeInput(text) {
     } else {
       await sendToOllama('Inform the user that the news feeds could not be reached right now. One sentence.');
     }
+    fetchSystemStatus();
+    return;
+  }
+
+  // ── Browser / web trigger ────────────────────────────────────────────────────
+  const _browserTrigger = detectBrowserTrigger(text);
+  if (_browserTrigger) {
+    setState('thinking');
+    appendMessage('user', text);
+    openBrowserPanel(_browserTrigger.url);
+    await sendToOllama(
+      `The user asked to open ${_browserTrigger.label}. Acknowledge in one short natural sentence.`,
+      {
+        ephemeralMessages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+        ],
+      }
+    );
     fetchSystemStatus();
     return;
   }

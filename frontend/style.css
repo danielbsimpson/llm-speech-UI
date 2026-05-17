@@ -1967,6 +1967,115 @@ a.news-story-source-title:hover {
   gap: 1px;
 }
 
+/* ── Browser Panel ─────────────────────────────────────────────────────────── */
+
+.browser-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 900;
+}
+
+.browser-panel {
+  position: fixed;
+  top: 5vh;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(90vw, 1100px);
+  height: 85vh;
+  background: #0e0e0e;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  z-index: 901;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.7);
+  overflow: hidden;
+}
+
+.browser-panel.hidden,
+.browser-overlay.hidden {
+  display: none;
+}
+
+.browser-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  background: #1a1a1a;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+.browser-toolbar button {
+  background: rgba(255, 255, 255, 0.06);
+  border: none;
+  border-radius: 6px;
+  color: #ccc;
+  cursor: pointer;
+  font-size: 15px;
+  padding: 5px 10px;
+  transition: background 0.15s;
+}
+
+.browser-toolbar button:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+#browser-url-bar {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: #e0e0e0;
+  font-size: 13px;
+  padding: 5px 10px;
+  outline: none;
+}
+
+#browser-url-bar:focus {
+  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+#browser-iframe-container {
+  flex: 1;
+  overflow: hidden;
+}
+
+#browser-frame {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #fff;
+}
+
+#browser-fallback {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: #aaa;
+  font-size: 15px;
+}
+
+#browser-fallback.hidden {
+  display: none;
+}
+
+#browser-external-link {
+  color: #7eb8f7;
+  font-size: 15px;
+  text-decoration: none;
+}
+
+#browser-external-link:hover {
+  text-decoration: underline;
+}
+
 .stocks-tile-sym {
   font-family: 'Share Tech Mono', monospace;
   font-size: clamp(0.62rem, 1vw, 0.75rem);

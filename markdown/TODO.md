@@ -1,4 +1,4 @@
-﻿# S.T.A.R.L.I.N.G. - Speechâ€‘Triggered Autonomous Reasoning & Local Intelligence Node Generator
+# S.T.A.R.L.I.N.G. - Speech‑Triggered Autonomous Reasoning & Local Intelligence Node Generator
 
 A voice-driven, S.T.A.R.L.I.N.G.-style web interface powered by a local LLM running directly via llama.cpp (llama-server). No cloud APIs. No Ollama wrapper. Just your hardware.
 
@@ -11,17 +11,17 @@ A voice-driven, S.T.A.R.L.I.N.G.-style web interface powered by a local LLM runn
 | 1 | TTS (Kokoro) | Speech playback is lagged ~3-4 s behind text appearing in the UI - full response completes before audio begins | ✅ Resolved - all pipelines migrated to GPU; delay reduced from 2-8 s to ~3-4 s. Sentence-chunked TTS (Phase 7) remains as a further improvement |
 | 2 | TTS / STT GPU utilisation | CPU usage spiked during synthesis and transcription; neither pipeline was dispatching to the GPU | ✅ Resolved - Kokoro and Whisper now run on GPU; `onnxruntime-gpu` and CUDA libraries confirmed working |
 | 3 | STT (listening mode) | Recording stops too early - silence detection cuts off the user mid-sentence before they have finished speaking | ✅ Resolved - (1) `mouseleave` PTT stop replaced with document-level `mouseup` so cursor drift mid-speech no longer stops recording; (2) Whisper backend VAD `min_silence_duration_ms` raised from 500 ms to 1 500 ms so short inter-word pauses are not treated as end-of-speech |
-| 4 | TTS (Kokoro) | LLM responses containing markdown/punctuation symbols are vocalised literally - e.g. `*` is spoken as "asterisk", `.` as "dot", `#` as "hash" - making speech sound unnatural and robotic | ðŸŸ¡ Partial - system prompt instructs the model to respond in plain prose only (no markdown, asterisks, headers, bullet points); a frontend `_sanitiseForTTS()` pass also strips residual symbols. Edge cases may still occur if the model ignores the instruction. |
+| 4 | TTS (Kokoro) | LLM responses containing markdown/punctuation symbols are vocalised literally - e.g. `*` is spoken as "asterisk", `.` as "dot", `#` as "hash" - making speech sound unnatural and robotic | 🟡 Partial - system prompt instructs the model to respond in plain prose only (no markdown, asterisks, headers, bullet points); a frontend `_sanitiseForTTS()` pass also strips residual symbols. Edge cases may still occur if the model ignores the instruction. |
 | 5 | STT / TTS / LLM (cold start) | The first mic press after page load has a noticeably longer end-to-end delay (~6-7 s) compared to subsequent presses (~2-3 s) - models and ONNX sessions are not initialised until the first real request arrives | ✅ Resolved - on page load, the greeting text is synthesised via Kokoro (heats ONNX session) and the resulting WAV is posted to Whisper (heats CUDA session); `fetchSystemStatus()` is awaited before the UI transitions to ONLINE so GPU badges are populated before the user speaks |
 | 6 | LLM output (system prompt compliance) | Model occasionally prefixes its response with "Starling: " before the actual output, causing the name to be announced aloud by TTS | ✅ Resolved - `_sanitiseForTTS()` now strips any leading `Starling:` / `STARLING:` / `S.T.A.R.L.I.N.G.:` pattern before text reaches Kokoro |
 | 7 | TTS / audio playback | Clicking the mic button while audio is playing can trigger a glitch where multiple audio clips begin playing simultaneously - two LLM responses race and their TTS output overlaps | ✅ Resolved - `sendToOllama` now creates an `AbortController` per request assigned to `_currentAbortCtrl`; `clearAudioQueue()` aborts it on every new mic press or text send, cancelling the in-flight fetch before any new request starts |
-| 8 | Presentation mode (voice triggers) | Dossier exit phrases are unreliable - phrases like "close dossier" or "hide dossier" are sometimes missed by STT or fail to match the regex; "return to chat" is the most reliable trigger | ✅ Resolved - `_matchesExitPhrase()` regex coverage broadened: added `closed`, `exiting`, `dismiss`, `end briefing/presentation`, `stop briefing`, reverse-order `dossier â€¦ close/exit`, `never mind`, `nevermind`, `cancel that`; `back to` now also matches `back to main` |
+| 8 | Presentation mode (voice triggers) | Dossier exit phrases are unreliable - phrases like "close dossier" or "hide dossier" are sometimes missed by STT or fail to match the regex; "return to chat" is the most reliable trigger | ✅ Resolved - `_matchesExitPhrase()` regex coverage broadened: added `closed`, `exiting`, `dismiss`, `end briefing/presentation`, `stop briefing`, reverse-order `dossier … close/exit`, `never mind`, `nevermind`, `cancel that`; `back to` now also matches `back to main` |
 | 9 | Presentation mode (LLM / TTS) | Interrupting the dossier briefing by saying "close dossier" exits the visual presentation mode correctly, but the in-flight LLM stream continues - the full dossier briefing text and audio still complete and appear in chat | ✅ Resolved - same `AbortController` fix as Issue #7; `clearAudioQueue()` is always called before `_routeInput()` on the voice path, aborting the previous `sendToOllama` fetch the moment the user issues a new command |
 | 10 | Presentation mode (LLM prompt) | The dossier briefing prompt instructions leaked into the LLM output - e.g. the model echoed "Based on this dossier, deliver a concise spoken briefing..." as part of its response | ✅ Resolved - dossier content is now injected as a `system`-role message so the model treats it as grounding data; the user turn contains only a short clean instruction that the model has no reason to repeat |
 | 11 | Tool panels (overlap) | When one tool panel is already visible (e.g. the timer panel showing a completed timer) and the user triggers a second tool (e.g. "what time is it"), the new panel renders on top of the existing one - both are visible simultaneously until the next user interaction | ✅ Resolved - `.chat-panel` converted to a flex column (`display: flex; flex-direction: column`); `.clock-panel` changed from `position: absolute` to `position: relative; flex-shrink: 0` so it occupies normal flow space; `.chat-inner` switched to `flex: 1; min-height: 0`. All visible tool panels now stack vertically rather than overlapping |
 | 12 | Timer (label parsing) | Named timers are not labelled correctly - "set a timer for 5 minutes called pasta" produces a timer with no label (or the duration itself as the label), and the completion announcement doubles the duration: "Your 5 minutes 5 minutes timer is done." The "called / named" keyword is not handled at all | ✅ Resolved - `detectTimerTrigger` now checks for a `called/named` suffix first (highest priority); the fallback label regex now rejects candidates that start with a digit or consist entirely of duration unit words (`minute`, `second`, `hour`, plurals, numeric strings) |
 | 13 | Weather panel (layout) | On wide-screen monitors the weather panel takes up too much vertical space - the current conditions block is oversized and the 5-day forecast strip is pushed down to a small portion of the panel, making the forecast hard to read at a glance | ✅ Resolved - `@media (min-width: 1400px)` converts the weather panel to a CSS grid with current conditions on the left and the 7-day forecast on the right; both sections share the horizontal space equally |
-| 14 | News briefing (synthesis latency) | End-to-end response time for the news briefing ballooned to ~35 s after the cross-source story synthesis update - the LLM synthesis call is a synchronous blocking step between RSS fetch and panel render, so nothing is visible to the user until the full synthesis completes | ï¿½ In Progress - Approaches A+B implemented (parallel fetch + background synthesis + frontend polling) |
+| 14 | News briefing (synthesis latency) | End-to-end response time for the news briefing ballooned to ~35 s after the cross-source story synthesis update - the LLM synthesis call is a synchronous blocking step between RSS fetch and panel render, so nothing is visible to the user until the full synthesis completes | � In Progress - Approaches A+B implemented (parallel fetch + background synthesis + frontend polling) |
 
 **Potential fixes to investigate:**
 - **STT early cutoff** - several approaches ranked by effort:
@@ -50,15 +50,15 @@ The bottleneck is a single blocking LLM call that processes all raw headlines be
 
 | # | Approach | Effort | Expected gain |
 |---|---|---|---|
-| A | **Raw headlines first, synthesise in background** | ðŸŸ¢ Low | Panel opens immediately with raw cards; synthesis result patches in silently once ready - user sees content within ~2 s, synthesis arrives ~30 s later without any perceived wait |
-| B | **Progressive panel render - RSS feeds stream in one-by-one** | ðŸŸ¢ Low | Open the panel immediately with a spinner; as each RSS feed resolves, append its raw cards to the list in real time - panel feels live even before synthesis starts |
-| C | **Streaming synthesis via SSE** | ðŸŸ¡ Medium | LLM synthesis endpoint returns each clustered story as a Server-Sent Event; frontend appends a new story card for each SSE line - user sees stories appear one-by-one over ~30 s instead of nothing then everything |
-| D | **Per-story synthesis (incremental prompts)** | ðŸŸ¡ Medium | Instead of one giant prompt for all headlines, fire N small LLM calls (one per story cluster detected by a lightweight local dedup heuristic); results stream into the panel as each mini-prompt resolves |
-| E | **Reduce synthesis input size** | ðŸŸ¢ Low | Lower `NEWS_SYNTHESIS_MAX_HEADLINES` from 40 â†’ 15-20; the model spends less time reading context; sacrifice completeness for speed |
-| F | **Background warm cache** | ðŸŸ¢ Low | After any successful synthesis, schedule a background re-fetch/re-synthesise at `NEWS_CACHE_SECONDS / 2`; subsequent opens hit a warm synthesised cache and respond in < 1 s |
-| G | **Lightweight client-side dedup before LLM** | ðŸŸ¡ Medium | Before calling the LLM, run a Jaccard / edit-distance deduplifier in Python that pre-groups obvious duplicates by title similarity; send only the representative titles to the LLM - smaller input, faster call |
-| H | **Skip synthesis for single-source categories** | ðŸŸ¢ Trivial | If a category only has one RSS feed configured, skip the LLM synthesis step entirely (nothing to deduplicate) and render raw cards immediately |
-| I | **Async synthesis with placeholder cards** | ðŸŸ¢ Low | Render a skeleton card for each raw headline immediately; patch each card's content with the synthesised version as the LLM result arrives - avoids any perceived blank panel |
+| A | **Raw headlines first, synthesise in background** | 🟢 Low | Panel opens immediately with raw cards; synthesis result patches in silently once ready - user sees content within ~2 s, synthesis arrives ~30 s later without any perceived wait |
+| B | **Progressive panel render - RSS feeds stream in one-by-one** | 🟢 Low | Open the panel immediately with a spinner; as each RSS feed resolves, append its raw cards to the list in real time - panel feels live even before synthesis starts |
+| C | **Streaming synthesis via SSE** | 🟡 Medium | LLM synthesis endpoint returns each clustered story as a Server-Sent Event; frontend appends a new story card for each SSE line - user sees stories appear one-by-one over ~30 s instead of nothing then everything |
+| D | **Per-story synthesis (incremental prompts)** | 🟡 Medium | Instead of one giant prompt for all headlines, fire N small LLM calls (one per story cluster detected by a lightweight local dedup heuristic); results stream into the panel as each mini-prompt resolves |
+| E | **Reduce synthesis input size** | 🟢 Low | Lower `NEWS_SYNTHESIS_MAX_HEADLINES` from 40 → 15-20; the model spends less time reading context; sacrifice completeness for speed |
+| F | **Background warm cache** | 🟢 Low | After any successful synthesis, schedule a background re-fetch/re-synthesise at `NEWS_CACHE_SECONDS / 2`; subsequent opens hit a warm synthesised cache and respond in < 1 s |
+| G | **Lightweight client-side dedup before LLM** | 🟡 Medium | Before calling the LLM, run a Jaccard / edit-distance deduplifier in Python that pre-groups obvious duplicates by title similarity; send only the representative titles to the LLM - smaller input, faster call |
+| H | **Skip synthesis for single-source categories** | 🟢 Trivial | If a category only has one RSS feed configured, skip the LLM synthesis step entirely (nothing to deduplicate) and render raw cards immediately |
+| I | **Async synthesis with placeholder cards** | 🟢 Low | Render a skeleton card for each raw headline immediately; patch each card's content with the synthesised version as the LLM result arrives - avoids any perceived blank panel |
 
 **Recommended short-term fix - Approach A (raw-first, background synthesis):**
 
@@ -84,23 +84,23 @@ Backend streams each synthesised story object as a JSON line over SSE. Frontend 
 
 ```
 starling-local/
-â”œâ”€â”€ frontend/           # HTML/CSS/JS or React app
-â”‚   â”œâ”€â”€ index.html
-â”‚   â”œâ”€â”€ style.css
-â”‚   â””â”€â”€ app.js
-â”œâ”€â”€ backend/            # FastAPI server (optional glue layer)
-â”‚   â”œâ”€â”€ main.py
-â”‚   â”œâ”€â”€ stt.py              # Speech-to-text (Whisper)
-â”‚   â”œâ”€â”€ tts.py              # Text-to-speech (Kokoro / Piper)
-â”‚   â”œâ”€â”€ llama_server.py     # llama-server (llama.cpp) streaming relay - DEFAULT
-â”‚   â””â”€â”€ ollama.py           # Ollama API client (kept as fallback)
-â”œâ”€â”€ scripts/
-â”‚   â”œâ”€â”€ setup.sh            # One-shot install script
-â”‚   â””â”€â”€ start_llama_server.bat  # Launch llama-server on Windows (CUDA)
-â”œâ”€â”€ .env.example
-â”œâ”€â”€ requirements.txt
-â”œâ”€â”€ TODO.md
-â””â”€â”€ README.md
+├── frontend/           # HTML/CSS/JS or React app
+│   ├── index.html
+│   ├── style.css
+│   └── app.js
+├── backend/            # FastAPI server (optional glue layer)
+│   ├── main.py
+│   ├── stt.py              # Speech-to-text (Whisper)
+│   ├── tts.py              # Text-to-speech (Kokoro / Piper)
+│   ├── llama_server.py     # llama-server (llama.cpp) streaming relay - DEFAULT
+│   └── ollama.py           # Ollama API client (kept as fallback)
+├── scripts/
+│   ├── setup.sh            # One-shot install script
+│   └── start_llama_server.bat  # Launch llama-server on Windows (CUDA)
+├── .env.example
+├── requirements.txt
+├── TODO.md
+└── README.md
 ```
 
 ---
@@ -146,7 +146,7 @@ starling-local/
 - [x] Write `backend/tts.py` with `/synthesize` POST endpoint and `/synthesize/voices` GET endpoint
 - [x] Return audio as WAV, play via `<Audio>` element in frontend
 - [x] 16 curated English voices (US/GB, male/female) selectable from UI dropdown
-- [x] TTS mode toggle: Kokoro â†’ Browser â†’ Off (persisted in localStorage)
+- [x] TTS mode toggle: Kokoro → Browser → Off (persisted in localStorage)
 - [x] Auto-fallback to browser SpeechSynthesis if Kokoro backend unavailable
 - [x] Model download script: `python scripts/download_models.py` (~330 MB)
 - [ ] Download models: run `python scripts/download_models.py`
@@ -166,7 +166,7 @@ starling-local/
 - [x] Display live streamed LLM response text (token by token with blinking cursor)
 - [x] Show STT transcript in real time as user speaks (transcript appended on stop)
 - [x] Add status indicators (GPU, model name, STT/TTS engine in footer; status in header)
-- [x] Wire mic button: start recording â†’ STT â†’ send to LLM â†’ TTS
+- [x] Wire mic button: start recording → STT → send to LLM → TTS
 - [x] Add text input fallback for when mic is unavailable
 - [x] Make UI responsive for different screen sizes (clamp-based sizing)
 - [x] Add keyboard shortcut (spacebar push-to-talk)
@@ -194,7 +194,7 @@ starling-local/
 - [x] Render tokens as they arrive (typewriter effect with blinking cursor)
 - [x] Maintain conversation history array for multi-turn context
 - [x] Pass full conversation history in each LLM request
-- [x] Add a â€œclear conversationâ€ button
+- [x] Add a “clear conversation” button
 - [ ] Start TTS only after full response is received - **done**; sentence-chunked TTS still pending (see Issue #1)
 
 ---
@@ -207,7 +207,7 @@ starling-local/
 - [x] Per-model GPU/CPU device indicators in footer (Whisper / Kokoro / Ollama badges, updated after each exchange)
 - [x] Add settings panel: change voice
 - [ ] Add settings panel: switch models, adjust temperature
-- [ ] Optional: wake word detection ("Hey STARLING") using Web Audio API
+- [ ] ~~Optional: wake word detection ("Hey STARLING") using Web Audio API~~ *(on hold — requires standalone unit; skip until explicitly scheduled)*
 - [ ] Optional: sound effects on mic activate / response start
 
 ### Design improvements
@@ -217,14 +217,14 @@ starling-local/
 - [x] Monochrome theme - rework colour palette to blacks, greys, and whites; replace cyan accent tones with light-grey/white highlights
 
 #### Listening state indicator - replace ear emoji
-The ðŸ‘‚ emoji clashes with the HUD aesthetic. The indicator should still clearly communicate that STARLING is actively listening. Ideas to explore:
+The 👂 emoji clashes with the HUD aesthetic. The indicator should still clearly communicate that STARLING is actively listening. Ideas to explore:
 - **Animated ring pulse**: repurpose the existing arc-reactor ring with a slow, steady radial pulse (CSS `scale` keyframe) in a distinct colour (e.g. a dim amber or cool white) to signal the listening state - reuses existing infrastructure with zero new assets
 - **Waveform border glow**: animate a soft glow on the waveform bars that is always visible during recording, using a CSS `box-shadow` / `filter: drop-shadow` cycle - ties the "listening" visual directly to the audio input element
 - **Scanning line / sweep animation**: a horizontal scan-line that sweeps across the mic button area at a steady cadence, evoking a radar or sonar sweep
-- **Dot-matrix text label**: replace the emoji with a monospaced, letter-spaced `LISTENINGâ€¦` label in a small caps style that blinks or fades in/out - purely typographic, fits the HUD font language
+- **Dot-matrix text label**: replace the emoji with a monospaced, letter-spaced `LISTENING…` label in a small caps style that blinks or fades in/out - purely typographic, fits the HUD font language
 - **Corner bracket blink**: flash the four corner-bracket elements (if present in the layout) in sync with the recording state - subtle, structural, no icons required
 - **Mic button state transform**: morph the mic button icon into a minimalist animated waveform SVG (three vertical bars of varying height) only while recording, returning to the static icon when idle
-- **Living black sphere** â­ ✅ **Implemented**: replaced the flat ring with a Three.js scene featuring a matte black `MeshPhongMaterial` sphere with per-vertex audio-driven displacement, a 4-state machine (idle / listening / thinking / speaking), and 5 orbiting PointLight orbs:
+- **Living black sphere** ⭐ ✅ **Implemented**: replaced the flat ring with a Three.js scene featuring a matte black `MeshPhongMaterial` sphere with per-vertex audio-driven displacement, a 4-state machine (idle / listening / thinking / speaking), and 5 orbiting PointLight orbs:
   - *Base appearance*: ✅ matte black sphere with subtle specular highlight
   - *Ambient light drift*: ✅ 5 PointLight orbs orbit on independently tilted planes (varied `tiltX` / `tiltZ`) - smooth, continuous motion using a delta-time accumulator
   - *Idle state*: ✅ orbs glow white at standard speed; sphere surface is smooth
@@ -238,12 +238,12 @@ The ðŸ‘‚ emoji clashes with the HUD aesthetic. The indicator should still 
 Remove background/border styling from message containers so text floats freely. Ideas to differentiate STARLING vs USER without bubbles:
 - **Typeface contrast**: STARLING uses a monospaced font (e.g. `JetBrains Mono`, `IBM Plex Mono`) to suggest machine output; USER uses a proportional sans-serif - immediately distinguishable at a glance
 - **Colour split**: STARLING text in a light-grey/off-white (`#e0e0e0`); USER text in a dimmer mid-grey (`#888`) - or reverse with USER slightly brighter to feel more "present"
-- **Speaker label style**: replace bold `STARLING` / `YOU` headers with small-caps, letter-spaced labels (`S T A R L I N G`, `U S E R`) in a muted tone, sitting above the message text at reduced font size; rename `YOU` â†’ `USER` throughout
+- **Speaker label style**: replace bold `STARLING` / `YOU` headers with small-caps, letter-spaced labels (`S T A R L I N G`, `U S E R`) in a muted tone, sitting above the message text at reduced font size; rename `YOU` → `USER` throughout
 - **Left-edge rule for STARLING**: a 2 px vertical rule (`border-left`) in a neutral grey on STARLING messages only - provides visual anchor without a full bubble
 - **Indent differentiation**: USER messages indented further right with a larger `padding-left`/`margin-left`, creating natural white-space separation without any background
 - **Opacity layering**: STARLING messages at full opacity; USER messages at ~70 % opacity - visually recedes the user text relative to the AI response, emphasising the output
 - **Font weight**: STARLING in `font-weight: 300` (light); USER in `font-weight: 400` (regular) - subtle but readable contrast
-- [x] Rename speaker label `YOU` â†’ `USER` in frontend (`app.js` / `index.html`)
+- [x] Rename speaker label `YOU` → `USER` in frontend (`app.js` / `index.html`)
 - [x] Remove bubble background/border styles from message containers in `style.css`
 - [x] Implement chosen typographic differentiation scheme (typeface, colour, or weight contrast)
 
@@ -254,7 +254,7 @@ Remove background/border styling from message containers so text floats freely. 
 - [x] Add `Makefile` with targets: `make install`, `make backend`, `make frontend`, `make llama`, `make test`, `make lint`
 - [x] Add hot-reload for frontend (e.g. Vite or live-server) - `make frontend` launches `npx live-server frontend/`
 - [x] Add hot-reload for backend (`uvicorn --reload`) - `make backend` runs uvicorn with `--reload` and `--reload-dir`
-- [x] Write basic integration test: send text â†’ verify LLM responds end-to-end - `scripts/test_integration.py`
+- [x] Write basic integration test: send text → verify LLM responds end-to-end - `scripts/test_integration.py`
 - [x] Document all `.env` variables in `.env.example`
 
 ---
@@ -279,14 +279,14 @@ Remove background/border styling from message containers so text floats freely. 
 
 Each tool is a self-contained intercept added before the `sendToOllama()` call in
 `mediaRecorder.onstop` and `handleSend()`. None modify existing pipeline logic - they all
-follow the established pattern: check transcript â†’ return early if matched â†’ resume normal
+follow the established pattern: check transcript → return early if matched → resume normal
 LLM path if not matched.
 
 **Implementation guides** live in `markdown/` - one file per tool.
 
 ### Prerequisite - One-time ES Module Conversion
 
-All tools are written as ES modules (`export function â€¦`). Before implementing any tool, convert
+All tools are written as ES modules (`export function …`). Before implementing any tool, convert
 the `app.js` script tag in `index.html` from classic to module:
 
 ```html
@@ -309,22 +309,22 @@ Tools are ordered from lowest to highest disruption to the existing pipeline:
 
 | # | Tool | Guide | Backend changes | New deps | Risk |
 |---|---|---|---|---|---|
-| 1 | Time & Date | `TIME.md` | None | None | ðŸŸ¢ Trivial |
-| 2 | Timers | `TIMER.md` | None | None | ðŸŸ¢ Trivial |
-| 3 | Weather | `WEATHER.md` | 1 new router file | `httpx` | ðŸŸ¢ Low |
-| 4 | News Briefing | `NEWS.md` | 1 new router file | `feedparser` | ðŸŸ¢ Low |
+| 1 | Time & Date | `TIME.md` | None | None | 🟢 Trivial |
+| 2 | Timers | `TIMER.md` | None | None | 🟢 Trivial |
+| 3 | Weather | `WEATHER.md` | 1 new router file | `httpx` | 🟢 Low |
+| 4 | News Briefing | `NEWS.md` | 1 new router file | `feedparser` | 🟢 Low |
 | 5 | Stocks & Crypto | `STOCKS.md` | 1 new router file | `yfinance`, `tzdata` | ✅ Done |
-| 6 | Wake Word & Interrupt | `WAKE_WORD.md` | None | None | ðŸŸ¡ Medium |
-| 7 | In-UI Browser Panel | `WEBCALL.md` | None | None | ðŸŸ¡ Medium |
-| 8 | Ideas Tracker | `IDEAS_TRACKER.md` | 1 new router file | None | ðŸŸ¡ Medium |
-| 9 | Journal | `JOURNAL.md` | 1 new router file | None | ðŸŸ¡ Med-High |
-| 10 | Wikipedia RAG | `WIKIPEDIA.md` | 1 new router file | `faiss-cpu` / `chromadb`, embeddings model | ðŸŸ  High |
-| 11 | Google Calendar | `CALENDAR.md` | 1 new router file | `google-api-python-client` | ðŸ”´ High |
-| 12 | Gmail | `GMAIL.md` | 1 new router file | `google-api-python-client` | ðŸ”´ High |
+| 6 | Wake Word & Interrupt | `WAKE_WORD.md` | None | None | ⏸️ On Hold (future — standalone unit required) |
+| 7 | In-UI Browser Panel | `WEBCALL.md` | None | None | ✅ Done |
+| 8 | Ideas Tracker | `IDEAS_TRACKER.md` | 1 new router file | None | 🟡 Medium |
+| 9 | Journal | `JOURNAL.md` | 1 new router file | None | 🟡 Med-High |
+| 10 | Wikipedia RAG | `WIKIPEDIA.md` | 1 new router file | `faiss-cpu` / `chromadb`, embeddings model | 🟠 High |
+| 11 | Google Calendar | `CALENDAR.md` | 1 new router file | `google-api-python-client` | 🔴 High |
+| 12 | Gmail | `GMAIL.md` | 1 new router file | `google-api-python-client` | 🔴 High |
 
 ---
 
-### Tool 1 - Time & Date (`TIME.md`) ðŸŸ¢
+### Tool 1 - Time & Date (`TIME.md`) 🟢
 
 > **Guide:** `markdown/TIME.md`  
 > **Pipeline risk:** None - zero backend, zero LLM involvement, sub-200 ms response.
@@ -334,14 +334,14 @@ No backend file, no new dependency, no mode flag. The spoken response is enqueue
 before any network call could even be made.
 
 - [x] Add `detectTimeTrigger(transcript)` function to `app.js` (or import from `time-panel.js`)
-- [x] Add time intercept block in `mediaRecorder.onstop` - format `Date()` â†’ `appendMessage` + `enqueueSpeak` â†’ `return`
+- [x] Add time intercept block in `mediaRecorder.onstop` - format `Date()` → `appendMessage` + `enqueueSpeak` → `return`
 - [x] Mirror intercept in `handleSend()`
 - [x] (Optional) Add clock panel HTML + CSS to `index.html` / `style.css` for a live digital readout
 - [x] (Optional) Add date query extension: "what day is it", "what's the date today"
 
 ---
 
-### Tool 2 - Timers (`TIMER.md`) ðŸŸ¢
+### Tool 2 - Timers (`TIMER.md`) 🟢
 
 > **Guide:** `markdown/TIMER.md`  
 > **Pipeline risk:** None - zero backend, pure `setInterval`, Web Audio API chime reuses `_getAudioCtx()`.
@@ -359,7 +359,7 @@ completion chime - no new AudioContext is created. Multiple named timers are sup
 
 ---
 
-### Tool 3 - Weather (`WEATHER.md`) ðŸŸ¢
+### Tool 3 - Weather (`WEATHER.md`) 🟢
 
 > **Guide:** `markdown/WEATHER.md`  
 > **Pipeline risk:** Low - one new router file, one new frontend module. Uses Open-Meteo (free, no API key, no account).
@@ -375,9 +375,9 @@ Open-Meteo's free public API. No authentication required.
 - [x] Import in `app.js` and add weather intercept block in `onstop` + `handleSend`
 - [x] Add weather panel HTML to `index.html`
 - [x] Add weather panel CSS to `style.css`
-- [x] Test: "What's the weather?" â†’ panel opens + LLM spoken summary of current conditions + 7-day forecast
+- [x] Test: "What's the weather?" → panel opens + LLM spoken summary of current conditions + 7-day forecast
 
-#### Enhancement - Local JSON Cache & Historical Tracking ðŸŸ¡
+#### Enhancement - Local JSON Cache & Historical Tracking 🟡
 
 Persist each weather API response to a local JSON file on disk. Before calling Open-Meteo, check the cache; if the most recent entry is less than 1 hour old, serve the stored data instead. Every cache miss (i.e. a real API call) appends a timestamped record, building a passive historical log over time.
 
@@ -395,7 +395,7 @@ Persist each weather API response to a local JSON file on disk. Before calling O
 **Frontend changes (`frontend/weather-panel.js`)**
 
 - [x] Display a small cache-age label in the weather panel header when serving cached data - e.g. `"Last updated 23 min ago"` - so the user knows the data is not live
-- [x] Add a manual "Refresh" button (ðŸ”„) to the panel that calls `GET /weather?force=true` (bypass cache, always fetch live) and re-renders the panel
+- [x] Add a manual "Refresh" button (🔄) to the panel that calls `GET /weather?force=true` (bypass cache, always fetch live) and re-renders the panel
 - [x] Support `force=true` query param in the backend: skip the age check and always call Open-Meteo when `force` is present
 
 **`.env` additions**
@@ -409,9 +409,9 @@ WEATHER_HISTORY_MAX=168
 
 - [x] Add `memory/weather_cache.json` to `.gitignore` (personal location data - do not commit)
 
-#### Enhancement - Location-Aware Weather Queries ðŸŸ¡
+#### Enhancement - Location-Aware Weather Queries 🟡
 
-Allow the user to ask for weather at any named location by including it in the voice query. When no location is mentioned, fall back to the default coordinates stored in `.env` (Framingham, MA). When an ambiguous place name could match multiple locations (e.g. "Brighton" â†’ Brighton, England or Brighton, MA), bias resolution toward the geographically closest match to the default home location.
+Allow the user to ask for weather at any named location by including it in the voice query. When no location is mentioned, fall back to the default coordinates stored in `.env` (Framingham, MA). When an ambiguous place name could match multiple locations (e.g. "Brighton" → Brighton, England or Brighton, MA), bias resolution toward the geographically closest match to the default home location.
 
 **Trigger parsing (`frontend/weather-panel.js`)**
 
@@ -451,7 +451,7 @@ WEATHER_DEFAULT_LABEL=Framingham
 
 ---
 
-### Tool 4 - News Briefing (`NEWS.md`) ðŸŸ¢
+### Tool 4 - News Briefing (`NEWS.md`) 🟢
 
 > **Guide:** `markdown/NEWS.md`  
 > **Pipeline risk:** Low - RSS via `feedparser`, free, no API key. Same intercept pattern as weather.
@@ -467,9 +467,9 @@ the LLM delivers a spoken briefing from structured context injection.
 - [x] Import in `app.js` and add news intercept block in `onstop` + `handleSend`
 - [x] Add news panel HTML to `index.html`
 - [x] Add news panel CSS to `style.css`
-- [x] Test: "News briefing" â†’ panel opens with headlines + LLM spoken summary of top stories
+- [x] Test: "News briefing" → panel opens with headlines + LLM spoken summary of top stories
 
-#### Enhancement - Category-Filtered News Queries ðŸŸ¡
+#### Enhancement - Category-Filtered News Queries 🟡
 
 Allow the user to request headlines for a specific news category by including it in the voice query. When no category is mentioned, fall back to the default "World" feed. Categories map to distinct RSS feed subsets defined in `.env` - no new dependencies required.
 
@@ -490,7 +490,7 @@ Allow the user to request headlines for a specific news category by including it
 
 - [x] Extend `detectNewsTrigger(transcript)` to extract an optional category token from the query:
   - Match category keywords anywhere in the phrase: `"show me the <category> news"`, `"pull up <category> headlines"`, `"display the <category> news"`, `"<category> briefing"`, `"what's happening in <category>"`, etc.
-  - Normalise synonyms to canonical tags: `"tech"` â†’ `technology`, `"financial"` / `"finance"` â†’ `business`, `"american"` / `"america"` / `"us"` â†’ `us`
+  - Normalise synonyms to canonical tags: `"tech"` → `technology`, `"financial"` / `"finance"` → `business`, `"american"` / `"america"` / `"us"` → `us`
   - If no recognisable category keyword is present, set `category = "world"` as the default
 - [x] Pass the resolved `category` string as a query param when calling `GET /news?category=<tag>`
 
@@ -514,7 +514,7 @@ Allow the user to request headlines for a specific news category by including it
 **Frontend panel updates (`frontend/news-panel.js`)**
 
 - [x] Display the resolved `category_label` in the panel header - e.g. `"NEWS - TECHNOLOGY"` or `"NEWS - WORLD HEADLINES"`
-- [x] Render a row of category chip buttons at the top of the news panel (World Â· US Â· Tech Â· Business Â· Science Â· Health Â· Sports Â· Entertainment) - clicking a chip calls `GET /news?category=<tag>` and re-renders the panel inline without reopening it
+- [x] Render a row of category chip buttons at the top of the news panel (World · US · Tech · Business · Science · Health · Sports · Entertainment) - clicking a chip calls `GET /news?category=<tag>` and re-renders the panel inline without reopening it
 - [x] Highlight the active chip with an accent border/colour so the user can see which category is currently displayed
 - [x] On a `400` response (unconfigured category), speak `"I don't have a feed set up for [category] news."` via `enqueueSpeak` and do not change the panel state
 
@@ -531,7 +531,7 @@ NEWS_FEEDS_SPORTS=https://www.espn.com/espn/rss/news,https://rss.nytimes.com/ser
 NEWS_FEEDS_ENTERTAINMENT=https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml
 ```
 
-#### Enhancement - Cross-Source Story Synthesis ðŸŸ 
+#### Enhancement - Cross-Source Story Synthesis 🟠
 
 When headlines are fetched from multiple RSS sources for a given category, multiple outlets will often cover the same story with slightly different titles. Rather than displaying them as duplicate cards, use the LLM silently to cluster the raw headlines into deduplicated story groups. Each synthesised story card shows a single unified headline, a short LLM-generated summary sentence, and an expandable source list - one link per outlet that reported the same story.
 
@@ -564,12 +564,12 @@ When headlines are fetched from multiple RSS sources for a given category, multi
 - [x] Replace the flat headline card list with synthesised story cards. Each card renders:
   - **Synthesised headline** - prominent, full-width title text
   - **Summary sentence** - muted smaller text directly beneath the headline
-  - **Source pills row** - compact inline chips, one per outlet (e.g. `BBC Â· Reuters Â· NYT`); each chip is a clickable `<a target="_blank">` link to the original article
+  - **Source pills row** - compact inline chips, one per outlet (e.g. `BBC · Reuters · NYT`); each chip is a clickable `<a target="_blank">` link to the original article
   - **Published timestamp** - taken from the most-recent `published` value among the grouped sources
 - [x] Add a subtle multi-source indicator (e.g. `3 sources` label) on cards with more than one outlet so the user immediately knows it is a merged story
 - [x] Expand/collapse the full source list on card click - show just the chips by default; expand to a stacked list of `[Source name] - Original title - link` rows when the user clicks the card body
 - [x] When `NEWS_SYNTHESIS_ENABLED=false` (raw mode), render the original flat card layout unchanged - no regression in fallback path
-- [x] Show a brief `"Synthesising headlinesâ€¦"` status message in the panel header while the silent LLM call is in flight, replaced by the category label once complete
+- [x] Show a brief `"Synthesising headlines…"` status message in the panel header while the silent LLM call is in flight, replaced by the category label once complete
 
 **LLM prompt template (stored in `backend/news.py` as a module-level constant)**
 
@@ -614,9 +614,9 @@ Same intercept and panel pattern as weather and news. No API key required.
 - [x] Add `.mkt-panel` HTML to `index.html` (inside `.body-cols`, same slot as news panel); add `MKT OPEN/CLOSED` footer badge (`#ftr-mkt-status`)
 - [x] Add market panel CSS + `mkt-mode` layout rules (mirrors `news-mode` - panel slides in at 60% width, `col-left` shrinks to 37%); stagger animation reuses existing `newsCardIn` keyframe
 - [x] Tightened `detectMarketTrigger` - bare "stock" no longer fires the panel; requires a qualifying phrase (e.g. "stock briefing", "market update", specific ticker names like "check NVIDIA")
-- [x] Test: "market briefing" / "show me crypto" / "check NVIDIA" â†’ panel opens + LLM spoken market summary
+- [x] Test: "market briefing" / "show me crypto" / "check NVIDIA" → panel opens + LLM spoken market summary
 
-#### Enhancement - JSON Watchlist File ðŸŸ¢
+#### Enhancement - JSON Watchlist File 🟢
 
 Replace the flat `STOCKS_TICKERS` env var with a user-editable `memory/watchlist.json` file that defines which equities and crypto tokens to track, organised into named groups. The file is the single source of truth - no code change required to add, remove, or reorganise tickers.
 
@@ -679,7 +679,7 @@ Replace the flat `STOCKS_TICKERS` env var with a user-editable `memory/watchlist
 
 - [x] Render group tabs at the top of the stocks panel, one tab per `groups[].label` plus an `All` tab that flattens everything - active tab highlighted with accent colour
 - [x] `default_group: "all"` opens the `All` tab; any other value selects the matching group tab on open
-- [x] Each ticker row shows: symbol, full company/asset name, current price, change amount, and `Â±pct%` coloured green/red
+- [x] Each ticker row shows: symbol, full company/asset name, current price, change amount, and `±pct%` coloured green/red
 - [x] Indices group (tickers starting with `^`) rendered without a price currency symbol - display as plain number with change
 
 **`.env` change**
@@ -691,20 +691,20 @@ Replace the flat `STOCKS_TICKERS` env var with a user-editable `memory/watchlist
 
 - [x] Add `memory/watchlist.json` to `.gitignore` - personal portfolio data; do not commit
 
-#### Enhancement - Interactive Chart Dashboard ðŸŸ¡
+#### Enhancement - Interactive Chart Dashboard 🟡
 
-Replace the flat ticker grid with a full-panel chart dashboard. The panel is divided into **6 fixed tiles** in a 3 Ã— 2 grid. The top row holds three always-visible market index charts; the bottom row holds a crypto index chart, a watchlist stocks tile, and a watchlist crypto tile. All charts are rendered with [Chart.js](https://www.chartjs.org/) (no new backend dependency - historical OHLC data is fetched from `yfinance`).
+Replace the flat ticker grid with a full-panel chart dashboard. The panel is divided into **6 fixed tiles** in a 3 × 2 grid. The top row holds three always-visible market index charts; the bottom row holds a crypto index chart, a watchlist stocks tile, and a watchlist crypto tile. All charts are rendered with [Chart.js](https://www.chartjs.org/) (no new backend dependency - historical OHLC data is fetched from `yfinance`).
 
 **Panel layout (6-tile grid)**
 
 ```
-â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-â”‚  S&P 500        â”‚  NASDAQ         â”‚  Dow Jones      â”‚
-â”‚  (^GSPC)        â”‚  (^IXIC)        â”‚  (^DJI)         â”‚
-â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
-â”‚  Bitcoin        â”‚  My Stocks      â”‚  My Crypto      â”‚
-â”‚  + Ethereum     â”‚  (watchlist)    â”‚  (watchlist)    â”‚
-â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+┌─────────────────┬─────────────────┬─────────────────┐
+│  S&P 500        │  NASDAQ         │  Dow Jones      │
+│  (^GSPC)        │  (^IXIC)        │  (^DJI)         │
+├─────────────────┼─────────────────┼─────────────────┤
+│  Bitcoin        │  My Stocks      │  My Crypto      │
+│  + Ethereum     │  (watchlist)    │  (watchlist)    │
+└─────────────────┴─────────────────┴─────────────────┘
 ```
 
 - Tiles 1-3 (S&P 500, NASDAQ, Dow Jones) - fixed index charts, always shown, not user-configurable
@@ -714,16 +714,16 @@ Replace the flat ticker grid with a full-panel chart dashboard. The panel is div
 
 **Timeframe controls**
 
-- [x] Each tile has its own timeframe pill strip: `1D Â· 1W Â· 1M Â· 3M Â· 1Y Â· ALL` - clicking a pill re-fetches and re-renders that tile only
+- [x] Each tile has its own timeframe pill strip: `1D · 1W · 1M · 3M · 1Y · ALL` - clicking a pill re-fetches and re-renders that tile only
 - [x] Default timeframe on panel open: `1M` for all tiles
 - [x] Timeframe selection is preserved per-tile in the panel's local state for the duration of the session (not persisted to localStorage)
 
 **Backend changes (`backend/stocks.py`)**
 
-- [x] Add `GET /stocks/history` endpoint accepting `ticker: str`, `period: str` (`1d`, `1wk`, `1mo`, `3mo`, `1y`, `max`) and `interval: str` (auto-derived from period: `1d`â†’`5m`, `1wk`â†’`1h`, `1mo`â†’`1d`, `3mo`â†’`1d`, `1y`â†’`1wk`, `max`â†’`1mo`):
+- [x] Add `GET /stocks/history` endpoint accepting `ticker: str`, `period: str` (`1d`, `1wk`, `1mo`, `3mo`, `1y`, `max`) and `interval: str` (auto-derived from period: `1d`→`5m`, `1wk`→`1h`, `1mo`→`1d`, `3mo`→`1d`, `1y`→`1wk`, `max`→`1mo`):
   - Calls `yfinance.Ticker(ticker).history(period=period, interval=interval)`
   - Returns `{ "ticker", "period", "interval", "points": [{ "t": <unix_ms>, "o", "h", "l", "c", "v" }] }`
-- [x] Cache each `(ticker, period)` pair independently - TTL varies by period: `1d`â†’`5 min`, `1wk`â†’`15 min`, `1mo`â†’`1 hr`, longer periodsâ†’`6 hr`
+- [x] Cache each `(ticker, period)` pair independently - TTL varies by period: `1d`→`5 min`, `1wk`→`15 min`, `1mo`→`1 hr`, longer periods→`6 hr`
 - [x] Batch endpoint `GET /stocks/history/batch` - accepts `tickers` (comma-separated) and a single `period`; returns an array of the same structure above - used on panel open to pre-fetch all 6 tiles in one round trip
 
 **Frontend - chart rendering (`frontend/stocks-panel.js`)**
@@ -743,7 +743,7 @@ Replace the flat ticker grid with a full-panel chart dashboard. The panel is div
 
 - [x] Add `.stocks-dashboard` grid: `display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr); gap: 1px; background: #1a1a1a;` - 1 px gap creates hairline dividers between tiles
 - [x] Each `.stocks-tile`: `background: #0a0a0a; padding: 12px; display: flex; flex-direction: column;`
-- [x] Tile header: `display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;` - left side shows ticker symbol + full name in small-caps; right side shows current price + `Â±pct%` chip
+- [x] Tile header: `display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;` - left side shows ticker symbol + full name in small-caps; right side shows current price + `±pct%` chip
 - [x] Timeframe pills: `display: flex; gap: 4px; margin-bottom: 8px;` - each pill `font-size: 0.65rem; padding: 2px 6px; border: 1px solid #333; border-radius: 3px; cursor: pointer;`; active pill `background: #fff; color: #000`
 - [x] Canvas element fills remaining tile height: `flex: 1; min-height: 0;`
 - [x] On small viewports (`< 900 px`): collapse to single-column stacked layout - `grid-template-columns: 1fr`
@@ -756,7 +756,7 @@ STOCKS_HISTORY_CACHE_SECONDS_SHORT=300
 STOCKS_HISTORY_CACHE_SECONDS_LONG=21600
 ```
 
-#### Enhancement - Persistent Local JSON Cache ðŸŸ¢
+#### Enhancement - Persistent Local JSON Cache 🟢
 
 Persist every `yfinance` response to a local JSON file on disk. Before calling Yahoo Finance, check the cache; if the stored entry for a given `(ticker, period)` pair is less than 24 hours old, serve the stored data directly - no network call made. This avoids redundant API hits across restarts and sessions, and builds a passive historical record of past snapshots over time.
 
@@ -811,7 +811,7 @@ Persist every `yfinance` response to a local JSON file on disk. Before calling Y
 **Frontend panel updates (`frontend/stocks-panel.js`)**
 
 - [x] Display a staleness label in each tile's header when `source === "cache"` - e.g. `"as of 3 hr ago"` - so the user knows they are viewing stored data
-- [x] Add a `"Refresh"` icon button (ðŸ”„) to each tile header that appends `?force=true` to the history or quote fetch for that tile, bypassing the cache for that specific `(ticker, period)` pair
+- [x] Add a `"Refresh"` icon button (🔄) to each tile header that appends `?force=true` to the history or quote fetch for that tile, bypassing the cache for that specific `(ticker, period)` pair
 - [x] Support `force=true` query param in all three backend endpoints (`/stocks`, `/stocks/history`, `/stocks/history/batch`) - when present, skip the cache read and always call `yfinance`; write the fresh result back to the cache as normal
 
 **`.env` additions**
@@ -824,9 +824,9 @@ STOCKS_CACHE_FILE=memory/stocks_cache.json
 
 - [x] Add `memory/stocks_cache.json` to `.gitignore` - contains personal watchlist pricing data; do not commit
 
-#### Enhancement - Historical Data View with Smart Gap-Fill ðŸŸ¡
+#### Enhancement - Historical Data View with Smart Gap-Fill 🟡
 
-Store historical candle data in `stocks_history.json` once fetched. On every subsequent request for a `(ticker, window)` pair, the backend checks the last stored candle date and fetches only the gap (last stored date â†’ today), appending new candles to the existing series. Users see instant chart renders from stored data; the network call covers only missing time. Supports **7D Â· 1M Â· 3M Â· 6M Â· 1Y Â· 5Y Â· 10Y** windows.
+Store historical candle data in `stocks_history.json` once fetched. On every subsequent request for a `(ticker, window)` pair, the backend checks the last stored candle date and fetches only the gap (last stored date → today), appending new candles to the existing series. Users see instant chart renders from stored data; the network call covers only missing time. Supports **7D · 1M · 3M · 6M · 1Y · 5Y · 10Y** windows.
 
 **Time windows and candle intervals**
 
@@ -869,7 +869,7 @@ Store historical candle data in `stocks_history.json` once fetched. On every sub
 
 1. Load stored series for `(ticker, window)` from `stocks_history.json`
 2. **First request (empty)**: call `yf.Ticker(t).history(period=yf_period, interval=interval)` for the full range; store; return
-3. **Subsequent request**: read `candles[-1]["t"]` â†’ derive `start_date = last_candle_date + 1 interval unit`
+3. **Subsequent request**: read `candles[-1]["t"]` → derive `start_date = last_candle_date + 1 interval unit`
 4. Call `yf.Ticker(t).history(start=start_date, end=datetime.utcnow(), interval=interval)` - fetches only the gap
 5. Deduplicate on `t`, merge new candles into the stored array (append only), re-sort ascending
 6. Update `fetched_at`; save atomically; return the full stored array
@@ -880,38 +880,38 @@ Store historical candle data in `stocks_history.json` once fetched. On every sub
 - [x] Add `STOCKS_HISTORY_FILE` to `.env` / `.env.example` (default: `memory/stocks_history.json`)
 - [x] On startup, create `stocks_history.json` if absent (seed: `{}`)
 - [x] Write `load_history_cache() -> dict` and `save_history_cache(cache: dict)` - atomic write via `.tmp` + `os.replace` (same pattern as quote cache)
-- [x] Write `_gap_fill(ticker, window) -> list[dict]` implementing the algorithm above; maps `window` â†’ `(yf_period, interval)` via a lookup table
+- [x] Write `_gap_fill(ticker, window) -> list[dict]` implementing the algorithm above; maps `window` → `(yf_period, interval)` via a lookup table
 - [x] Update `GET /stocks/history?ticker=&window=` to use `_gap_fill()`; response includes `"source": "cache"` (no new candles) or `"source": "gap_fill"` (new candles appended) so the frontend can show a freshness label
-- [x] On the first response for a ticker, fire a `BackgroundTask` that pre-fills all other windows for that ticker in ascending cost order (`7d â†’ 1m â†’ 3m â†’ 6m â†’ 1y â†’ 5y â†’ 10y`) - so subsequent window switches are instant
+- [x] On the first response for a ticker, fire a `BackgroundTask` that pre-fills all other windows for that ticker in ascending cost order (`7d → 1m → 3m → 6m → 1y → 5y → 10y`) - so subsequent window switches are instant
 - [x] Add `DELETE /stocks/history?ticker=&window=` - omit `window` to clear all windows for that ticker; omit both to wipe the entire file (useful for forced re-fetch)
 
 **Frontend changes (`frontend/stocks-panel.js`)**
 
-- [x] Window selector pill strip labels: `7D Â· 1M Â· 3M Â· 6M Â· 1Y Â· 5Y Â· 10Y`; map to backend `window` values `7d Â· 1m Â· 3m Â· 6m Â· 1y Â· 5y Â· 10y`
-- [x] Show `"Loadingâ€¦"` placeholder on first chart open for a ticker while the full-period fetch runs; subsequent opens for the same ticker render from gap-filled disk data and feel instant
+- [x] Window selector pill strip labels: `7D · 1M · 3M · 6M · 1Y · 5Y · 10Y`; map to backend `window` values `7d · 1m · 3m · 6m · 1y · 5y · 10y`
+- [x] Show `"Loading…"` placeholder on first chart open for a ticker while the full-period fetch runs; subsequent opens for the same ticker render from gap-filled disk data and feel instant
 - [x] Display `"Updated <relative time>"` label below the chart sourced from the `fetched_at` field (e.g. "Updated 3 hr ago")
 
-#### Enhancement - Clickable Tile Detail View ðŸŸ¡
+#### Enhancement - Clickable Tile Detail View 🟡
 
 Any ticker card in the market grid is clickable. Clicking it slides the grid out of view and renders a full-width detail pane inside `.mkt-panel` showing an interactive Chart.js line chart for that ticker, a time window pill strip, a stats strip, and a "Hear Briefing" button. The Back button returns to the grid.
 
 **Detail view layout**
 
 ```
-â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-â”‚  â† Back    AAPL - Apple Inc.       $213.45 â–² +0.58%  â”‚
-â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
-â”‚  [ 7D ][ 1M ][ 3M ][ 6M ][ 1Y ][ 5Y ][ 10Y ]        â”‚
-â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
-â”‚                                                      â”‚
-â”‚                  Line chart (Chart.js)               â”‚
-â”‚          â† crosshair tooltip: date + OHLCV â†’         â”‚
-â”‚                                                      â”‚
-â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
-â”‚  52W High: $245.50  â”‚  52W Low: $164.08  â”‚  Vol: 58M â”‚
-â”‚  Mkt Cap: $3.2T     â”‚  P/E: 34.2         â”‚  Yield: - â”‚
-â”‚               [ â™ª Hear Briefing ]                    â”‚
-â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+┌──────────────────────────────────────────────────────┐
+│  ← Back    AAPL - Apple Inc.       $213.45 ▲ +0.58%  │
+├──────────────────────────────────────────────────────┤
+│  [ 7D ][ 1M ][ 3M ][ 6M ][ 1Y ][ 5Y ][ 10Y ]        │
+├──────────────────────────────────────────────────────┤
+│                                                      │
+│                  Line chart (Chart.js)               │
+│          ← crosshair tooltip: date + OHLCV →         │
+│                                                      │
+├──────────────────────────────────────────────────────┤
+│  52W High: $245.50  │  52W Low: $164.08  │  Vol: 58M │
+│  Mkt Cap: $3.2T     │  P/E: 34.2         │  Yield: - │
+│               [ ♪ Hear Briefing ]                    │
+└──────────────────────────────────────────────────────┘
 ```
 
 **Frontend changes (`frontend/stocks-panel.js`)**
@@ -922,7 +922,7 @@ Any ticker card in the market grid is clickable. Clicking it slides the grid out
 - [x] Chart.js area/line chart in `#mkt-detail-canvas`:
   - Lazy-load Chart.js and `chartjs-adapter-date-fns` on first `openDetailView()` call (dynamic `import()` or injected `<script>`) so they have zero impact on initial page load
   - Line colour: green (`#4ade80`) on positive session, red (`#f87171`) on negative; area fill: semi-transparent tint of the line colour at 0.08 opacity
-  - X-axis: `type: "time"`; labels auto-formatted based on window (`7D` â†’ hours, `1M-6M` â†’ day/month, `1Y-10Y` â†’ month/year)
+  - X-axis: `type: "time"`; labels auto-formatted based on window (`7D` → hours, `1M-6M` → day/month, `1Y-10Y` → month/year)
   - Y-axis: price-formatted ticks; no currency prefix for index tickers (`^` prefix)
   - Custom crosshair: vertical hairline follows cursor via `afterDraw` plugin hook; tooltip card shows `Date`, `Close`, `Open`, `High`, `Low`, `Volume`
 - [x] Window pill click: call `GET /stocks/history?ticker=<symbol>&window=<w>`; swap chart data via `chart.data.datasets[0].data = newPoints; chart.update('active')`; update the "Updated" timestamp label
@@ -933,14 +933,14 @@ Any ticker card in the market grid is clickable. Clicking it slides the grid out
 **CSS additions (`style.css`)**
 
 - [x] `.mkt-detail` - `display: none; flex-direction: column; width: 100%; height: 100%;` - toggled with `.mkt-grid` (one visible at a time)
-- [x] `.mkt-detail-header` - flex row; Back button `â†` far left; symbol + full name centre-left; price + change chip far right
+- [x] `.mkt-detail-header` - flex row; Back button `←` far left; symbol + full name centre-left; price + change chip far right
 - [x] `.mkt-window-pills` - pill strip styled identically to existing `.mkt-tabs`; active pill `background: #fff; color: #000`
 - [x] `#mkt-detail-canvas` - `flex: 1; min-height: 0;` so it fills remaining panel height after header + pills + stats
 - [x] `.mkt-stats-strip` - 3-column CSS grid; small monospace key/value pairs; muted text; full-width top separator border
 - [x] `.mkt-hear-btn` - full-width action button at base of stats strip; same visual style as `.mkt-refresh-btn`
 - [x] On small viewports (< 600 px): hide the stats strip secondary row (P/E, yield); scale chart font sizes down
 
-#### Enhancement - LLM Ticker Briefing on Tile Expand ðŸŸ¢
+#### Enhancement - LLM Ticker Briefing on Tile Expand 🟢
 
 When the detail view opens for a ticker, the backend computes a rich context string from stored historical candles and current quote data. The frontend feeds this context to the existing `sendToOllama()` call, producing a 2-3 sentence spoken briefing that plays automatically as the chart loads. A "Hear Briefing" button re-triggers it at any time; changing the time window re-triggers it for the new period.
 
@@ -951,7 +951,7 @@ When the detail view opens for a ticker, the backend computes a rich context str
 - Historical performance over the selected window: % change from first stored candle to last stored candle
 - Peak close and date within the window; trough close and date
 - S&P 500 (`^GSPC`) % change over the same window - market benchmark comparison
-- Over/under-performance delta: `ticker_pct_change âˆ’ sp500_pct_change`
+- Over/under-performance delta: `ticker_pct_change − sp500_pct_change`
 
 **LLM prompt template (filled server-side in `GET /stocks/briefing`)**
 
@@ -961,7 +961,7 @@ Deliver a concise spoken briefing (2-3 sentences, max 60 words) for {TICKER} ({F
 
 Context:
 - Current price: {PRICE} ({PCT_TODAY}% today, market is {STATUS})
-- Over the past {WINDOW_LABEL}: {PCT_WINDOW}% ({FIRST_PRICE} â†’ {LAST_PRICE})
+- Over the past {WINDOW_LABEL}: {PCT_WINDOW}% ({FIRST_PRICE} → {LAST_PRICE})
 - 52W range: ${LOW_52W} - ${HIGH_52W}; currently {PCT_FROM_HIGH}% below 52W high
 - Window peak: ${PEAK_CLOSE} on {PEAK_DATE}; trough: ${TROUGH_CLOSE} on {TROUGH_DATE}
 - S&P 500 over same period: {SP500_PCT}% - ticker is {OVER/UNDER}performing the market by {DELTA}%
@@ -990,7 +990,10 @@ Do not give financial advice. Be factual, conversational, and direct. Avoid fill
 
 ---
 
-### Tool 6 - Wake Word & Interruptible Conversations (`WAKE_WORD.md`) ðŸŸ¡
+### Tool 6 - Wake Word & Interruptible Conversations (`WAKE_WORD.md`) ⏸️ ON HOLD
+
+> ⚠️ **SKIP THIS TOOL** until explicitly instructed to proceed.  
+> **Reason:** This feature requires Starling to run on a dedicated standalone unit (e.g. Apple Mac Mini or standalone PC) where an always-on microphone listener is practical. It is not suitable for the current shared-machine deployment and should remain deferred until the project migrates to that environment.
 
 > **Guide:** `markdown/WAKE_WORD.md`  
 > **Pipeline risk:** Medium - the always-on Web Speech API listener runs concurrently with `MediaRecorder`. State guards prevent double-recording but require careful ordering. Chrome/Edge only; gracefully disabled in other browsers.
@@ -1004,18 +1007,18 @@ shortcuts are also added (Escape = hard stop, existing Spacebar enhanced with in
 - [ ] Add wake indicator, toggle button, and `interruptFlash` CSS to `style.css`
 - [ ] Import in `app.js` - `initWakeWord({ onWakeWord, onInterrupt, onListenerOn, onListenerOff, getState })`
 - [ ] Add `_setWakeUI()` helper and `_triggerInterruptFlash()` helper in `app.js`
-- [ ] Wire `onWakeWord` callback â†’ `startRecording()` (with state guard: skip if `listening` or `transcribing`)
-- [ ] Wire `onInterrupt` callback â†’ `clearAudioQueue()` + 250 ms delay + `startRecording()`
-- [ ] Add Escape key listener: hard stop speech/recording â†’ `setState('idle')`
+- [ ] Wire `onWakeWord` callback → `startRecording()` (with state guard: skip if `listening` or `transcribing`)
+- [ ] Wire `onInterrupt` callback → `clearAudioQueue()` + 250 ms delay + `startRecording()`
+- [ ] Add Escape key listener: hard stop speech/recording → `setState('idle')`
 - [ ] Add interrupt flash to mic `mousedown` and spacebar `keydown` when `state === 'speaking'`
 - [ ] Persist wake word on/off preference to `localStorage`
-- [ ] Test: say "Hey Starling" â†’ mic activates hands-free
-- [ ] Test: say "Stop" or "Hey Starling" mid-speech â†’ speech cuts, mic opens
-- [ ] Test: press Escape mid-speech â†’ hard stop, returns to idle
+- [ ] Test: say "Hey Starling" → mic activates hands-free
+- [ ] Test: say "Stop" or "Hey Starling" mid-speech → speech cuts, mic opens
+- [ ] Test: press Escape mid-speech → hard stop, returns to idle
 
 ---
 
-### Tool 7 - In-UI Browser Panel (`WEBCALL.md`) ðŸŸ¡
+### Tool 7 - In-UI Browser Panel (`WEBCALL.md`) ✅
 
 > **Guide:** `markdown/WEBCALL.md`  
 > **Pipeline risk:** Medium - frontend-only iframe panel. Many sites block embedding via `X-Frame-Options` / CSP; the guide documents a fallback "open in new tab" path for those. No changes to the recording or TTS pipelines.
@@ -1023,16 +1026,21 @@ shortcuts are also added (Escape = hard stop, existing Spacebar enhanced with in
 Trigger phrase opens a sandboxed iframe panel immediately (zero LLM latency). An optional
 backend CORS proxy endpoint can be added later for sites that block direct embedding.
 
-- [ ] Add browser panel HTML to `index.html` (iframe + toolbar + overlay)
-- [ ] Add browser panel CSS to `style.css`
-- [ ] Create `frontend/browser-panel.js` (or inline in `app.js`) - `detectBrowserTrigger()`, `openBrowserPanel()`, URL bar wiring, back/forward/refresh, fallback "open in new tab"
-- [ ] Import / add intercept in `onstop` + `handleSend`
-- [ ] Test: "Open YouTube" â†’ panel opens to youtube.com (or falls back to new tab if blocked)
-- [ ] Test: "Search Google for weather in New York" â†’ URL bar auto-populated
+- [x] Add browser panel HTML to `index.html` (iframe + toolbar + overlay)
+- [x] Add browser panel CSS to `style.css`
+- [x] Create `frontend/browser-panel.js` - `detectBrowserTrigger()`, `detectBrowserClose()`, `isBrowserPanelOpen()`, `openBrowserPanel()`, `closeBrowserPanel()`, URL bar wiring, back/forward/refresh, fallback "open in new tab"
+- [x] Import / add intercept in `_routeInput()` (browser close phrase + browser open trigger)
+- [x] Added to `dismissAllToolPanels()` — browser panel closes with all other tool panels
+- [x] DuckDuckGo search trigger: "search for X" → `duckduckgo.com/?q=X`
+- [x] Wikipedia trigger: "look up X on Wikipedia" / "search Wikipedia for X"
+- [x] Voice close: "close browser" → spoken acknowledgment, panel dismissed
+- [x] LLM spoken acknowledgment on open (ephemeral, one sentence)
+- [ ] Test: "Open YouTube" → panel opens to youtube.com (or falls back to new tab if blocked)
+- [ ] Test: "Search for machine learning" → DuckDuckGo search opens in panel
 
 ---
 
-### Tool 8 - Ideas Tracker (`IDEAS_TRACKER.md`) ðŸŸ¡
+### Tool 8 - Ideas Tracker (`IDEAS_TRACKER.md`) 🟡
 
 > **Guide:** `markdown/IDEAS_TRACKER.md`  
 > **Pipeline risk:** Medium - introduces `ideasMode` flag, which gates the next mic press. The flag is checked at position 2 in the intercept chain (immediately after `journalMode`). Must be explicitly cleared in the clear/reset button handler.
@@ -1051,13 +1059,13 @@ accumulation, no approval step.
 - [ ] Add ideas panel HTML to `index.html` (capture view + list view)
 - [ ] Add ideas panel CSS (amber/gold accent)
 - [ ] Add `memory/ideas.json` to `.gitignore`
-- [ ] Test capture: "Store my idea" â†’ panel appears â†’ speak idea â†’ "Idea stored: [title]"
-- [ ] Test read-back: "Show my ideas" â†’ numbered card list + LLM reads titles
-- [ ] Test discard: "Discard my last idea" â†’ most recent removed + spoken confirmation
+- [ ] Test capture: "Store my idea" → panel appears → speak idea → "Idea stored: [title]"
+- [ ] Test read-back: "Show my ideas" → numbered card list + LLM reads titles
+- [ ] Test discard: "Discard my last idea" → most recent removed + spoken confirmation
 
 ---
 
-### Tool 9 - Voice Journal (`JOURNAL.md`) ðŸŸ¡
+### Tool 9 - Voice Journal (`JOURNAL.md`) 🟡
 
 > **Guide:** `markdown/JOURNAL.md`  
 > **Pipeline risk:** Medium-High - introduces `journalMode` flag which **must be checked FIRST** in the intercept chain (position 1, before all other tools including `ideasMode`). While in journal mode every mic press is consumed as a journal segment - no other trigger can fire. Failure to place this check at position 1 will cause other tools to misdirect journal segments.
@@ -1075,13 +1083,13 @@ summarises the full session, user confirms before saving to disk.
 - [ ] Add journal panel HTML to `index.html` (dictation view + review/confirm view + entries list)
 - [ ] Add journal panel CSS (violet accent)
 - [ ] Add `memory/journal/` to `.gitignore`
-- [ ] Test dictation: "Start a journal entry" â†’ multiple mic presses â†’ "Done" â†’ LLM summary shown â†’ confirm to save
-- [ ] Test read-back: "Read my journal" â†’ entry list + LLM reads most recent
-- [ ] Test search: "Search journal for meeting" â†’ filtered entries
+- [ ] Test dictation: "Start a journal entry" → multiple mic presses → "Done" → LLM summary shown → confirm to save
+- [ ] Test read-back: "Read my journal" → entry list + LLM reads most recent
+- [ ] Test search: "Search journal for meeting" → filtered entries
 
 ---
 
-### Tool 10 - Wikipedia RAG (`WIKIPEDIA.md`) ðŸŸ 
+### Tool 10 - Wikipedia RAG (`WIKIPEDIA.md`) 🟠
 
 > **Guide:** `markdown/WIKIPEDIA.md`  
 > **Pipeline risk:** High - new Python dependencies (`faiss-cpu` or `chromadb`, `sentence-transformers` or `nomic-embed-text`), a one-time corpus ingestion step, and in-memory session management on the backend. The trigger phrase `"wikipedia search"` is distinct from `"dossier"` and does not affect the existing RAG path. All existing files remain untouched.
@@ -1099,17 +1107,17 @@ Implement Phase 1 first (Simple English Wikipedia, ~250 MB, ~200,000 articles). 
 - [ ] Import in `app.js` and add wiki intercept block in `onstop` + `handleSend`
 - [ ] Add wiki panel HTML + CSS
 - [ ] Run one-time ingestion: `python backend/wikipedia_rag.py --ingest` (allow 30-60 min)
-- [ ] Test: "Wikipedia search" â†’ Starling asks what to look up â†’ Q&A grounded in article â†’ no hallucination
+- [ ] Test: "Wikipedia search" → Starling asks what to look up → Q&A grounded in article → no hallucination
 
 ---
 
-### Tool 11 - Google Calendar (`CALENDAR.md`) ðŸ”´
+### Tool 11 - Google Calendar (`CALENDAR.md`) 🔴
 
 > **Guide:** `markdown/CALENDAR.md`  
 > **Pipeline risk:** High - requires a Google Cloud project, OAuth2 Desktop app credentials, and a one-time browser auth flow. The token auto-refreshes after initial setup. Backend file named `calendar_routes.py` (NOT `calendar.py`) to avoid Python stdlib collision.
 
 - [ ] Create Google Cloud project and enable Google Calendar API (see guide Step A1)
-- [ ] Download OAuth credentials JSON â†’ `credentials/google_calendar_credentials.json`
+- [ ] Download OAuth credentials JSON → `credentials/google_calendar_credentials.json`
 - [ ] Add `credentials/` to `.gitignore`
 - [ ] `pip install google-api-python-client google-auth-httplib2 google-auth-oauthlib`
 - [ ] Run one-time auth: `python scripts/auth_google_calendar.py` (creates `google_token.json`)
@@ -1119,18 +1127,18 @@ Implement Phase 1 first (Simple English Wikipedia, ~250 MB, ~200,000 articles). 
 - [ ] Create `frontend/calendar-panel.js` - `detectCalendarTrigger()`, event list, week view
 - [ ] Import in `app.js` and add calendar intercept block in `onstop` + `handleSend`
 - [ ] Add calendar panel HTML + CSS
-- [ ] Test: "What's on my schedule today?" â†’ event list + LLM spoken daily briefing
+- [ ] Test: "What's on my schedule today?" → event list + LLM spoken daily briefing
 
 ---
 
-### Tool 12 - Gmail (`GMAIL.md`) ðŸ”´
+### Tool 12 - Gmail (`GMAIL.md`) 🔴
 
 > **Guide:** `markdown/GMAIL.md`  
 > **Pipeline risk:** High - same OAuth2 setup complexity as Calendar. Requires `gmail.readonly` + `gmail.modify` scopes. If Calendar OAuth is already configured, the same Google Cloud project is reused - add the Gmail scopes and re-run auth. Body truncated at 6,000 chars before LLM injection to avoid context overflow.
 
 - [ ] Enable Gmail API in existing Google Cloud project (or create one if Calendar was skipped)
 - [ ] Add `gmail.readonly` and `gmail.modify` scopes to OAuth consent screen
-- [ ] Download OAuth credentials â†’ `credentials/google_gmail_credentials.json` (can reuse calendar creds file)
+- [ ] Download OAuth credentials → `credentials/google_gmail_credentials.json` (can reuse calendar creds file)
 - [ ] Run one-time auth: `python scripts/auth_gmail.py` (creates `google_gmail_token.json`)
 - [ ] Create `backend/gmail_routes.py` - `GET /gmail/unread`, `GET /gmail/message/{id}`, `POST /gmail/trash/{id}`
 - [ ] Register `gmail_router` in `backend/main.py`
@@ -1140,19 +1148,19 @@ Implement Phase 1 first (Simple English Wikipedia, ~250 MB, ~200,000 articles). 
 - [ ] Import in `app.js` and add gmail intercept block in `onstop` + `handleSend`
 - [ ] Add `gmailPanel.classList.add('hidden')` to clear button handler
 - [ ] Add Gmail panel HTML + CSS (inbox view + message view)
-- [ ] Test: "View my emails" â†’ inbox + LLM spoken count and sender briefing
-- [ ] Test: "Summarize that email" â†’ 3-5 sentence LLM summary of open message
-- [ ] Test: "Delete that email" â†’ moves to Trash + spoken confirmation
+- [ ] Test: "View my emails" → inbox + LLM spoken count and sender briefing
+- [ ] Test: "Summarize that email" → 3-5 sentence LLM summary of open message
+- [ ] Test: "Delete that email" → moves to Trash + spoken confirmation
 
 ---
 
-### Enhancement - Toolkit Awareness & Fuzzy Tool Recovery ðŸŸ¡
+### Enhancement - Toolkit Awareness & Fuzzy Tool Recovery 🟡
 
 Two tiers of the same idea: making Starling genuinely aware of what she can do, and recovering gracefully when a tool trigger almost - but not quite - matched.
 
 ---
 
-#### Tier 1 - Toolkit Self-Awareness (Simple) ðŸŸ¢
+#### Tier 1 - Toolkit Self-Awareness (Simple) 🟢
 
 Inject a structured toolkit manifest into Starling's system prompt so she can answer natural questions like *"What can you do?"*, *"Do you have a weather tool?"*, or *"What tools are available?"* without hallucinating.
 
@@ -1169,7 +1177,7 @@ Inject a structured toolkit manifest into Starling's system prompt so she can an
   - News Briefing: reads RSS headlines by category ("news briefing", "show me the tech news").
   - Stocks & Crypto: shows live market prices ("what's the market doing?", "how is Apple trading?").
   - Wake Word: hands-free activation - say "Hey Starling" to start listening without pressing a button.
-  - In-UI Browser: opens a sandboxed web panel ("open YouTube", "search Google forâ€¦").
+  - In-UI Browser: opens a sandboxed web panel ("open YouTube", "search Google for…").
   - Ideas Tracker: captures and retrieves spoken ideas ("store my idea", "show my ideas").
   - Voice Journal: multi-press dictation with LLM summary ("start a journal entry").
   - Wikipedia RAG: grounded encyclopedia Q&A ("Wikipedia search for black holes").
@@ -1180,13 +1188,13 @@ Inject a structured toolkit manifest into Starling's system prompt so she can an
 - [ ] Append the `TOOLKIT_MANIFEST` block to the existing `LLAMA_SYSTEM_PROMPT` value at startup - separated by a blank line so it reads as a natural continuation of Starling's persona
 - [ ] Add `TOOLKIT_MANIFEST_ENABLED` flag to `.env` / `.env.example` (default `true`) - when `false`, the manifest is omitted (useful for token-budget-constrained models)
 - [ ] Keep the manifest in sync with the `TOOL_INTERCEPT_ORDER` list - when a new tool is added to `app.js`, update the manifest constant at the same time (single-file maintenance)
-- [ ] Test: "What can you do?" â†’ Starling describes all available tools in natural prose without markdown
-- [ ] Test: "Do you have a timer?" â†’ confirms yes and explains trigger phrases
-- [ ] Test: "Can you check my email?" â†’ confirms capability and explains how to trigger it
+- [ ] Test: "What can you do?" → Starling describes all available tools in natural prose without markdown
+- [ ] Test: "Do you have a timer?" → confirms yes and explains trigger phrases
+- [ ] Test: "Can you check my email?" → confirms capability and explains how to trigger it
 
 ---
 
-#### Tier 2 - Fuzzy Tool Detection & Confirmation (Complex) ðŸŸ¡
+#### Tier 2 - Fuzzy Tool Detection & Confirmation (Complex) 🟡
 
 When STT transcription produces a near-miss (garbled audio, background noise, hesitant speech), detect that the utterance was *probably* a tool trigger, confirm with the user via a spoken prompt, and open the tool on affirmation. Prevents the LLM from receiving noise fragments as chat input.
 
@@ -1236,13 +1244,13 @@ When STT transcription produces a near-miss (garbled audio, background noise, he
 Add the fuzzy confirm check to the Final Intercept Order:
 
 ```
-1.  journalMode active check      â† MUST be first
-2.  ideasMode active check        â† MUST be second
-3.  _fuzzyConfirmMode check       â† NEW: resolve pending tool confirmation before anything else
-4.  _matchesExitPhrase            â† dossier exit
+1.  journalMode active check      ← MUST be first
+2.  ideasMode active check        ← MUST be second
+3.  _fuzzyConfirmMode check       ← NEW: resolve pending tool confirmation before anything else
+4.  _matchesExitPhrase            ← dossier exit
     ... (existing order unchanged below)
-19. detectFuzzyToolIntent         â† NEW: catch near-miss transcriptions before LLM fallback
-20. appendMessage + sendToOllama  â† normal LLM path (catch-all)
+19. detectFuzzyToolIntent         ← NEW: catch near-miss transcriptions before LLM fallback
+20. appendMessage + sendToOllama  ← normal LLM path (catch-all)
 ```
 
 **Edge-case guards**
@@ -1265,26 +1273,26 @@ Once all tools are active, the intercept chain in `mediaRecorder.onstop` and `ha
 must follow this exact order to avoid mode flag collisions:
 
 ```
-1.  journalMode active check      â† MUST be first (gates all mic presses in journal mode)
-2.  ideasMode active check        â† MUST be second (gates next mic press in ideas mode)
-3.  _fuzzyConfirmMode check       â† resolve pending tool confirmation before any new trigger fires
-4.  _matchesExitPhrase            â† dossier exit
-5.  _parseTrigger                 â† dossier open
-6.  detectJournalStartTrigger     â† enter journal dictation mode
-7.  detectJournalReadTrigger      â† journal read / search / delete
-8.  detectIdeaCaptureTrigger      â† enter ideas capture mode
-9.  detectIdeaReadTrigger         â† ideas list / search / discard / clear
-10. detectTimerTrigger            â† timer set / cancel / status
-11. detectTimeTrigger             â† time / date query
-12. detectWeatherTrigger          â† weather forecast
-13. detectCalendarTrigger         â† calendar schedule
-14. detectNewsTrigger             â† news briefing
-15. detectMarketTrigger           â† stocks / crypto
-16. detectGmailTrigger            â† Gmail inbox / open / summarise / trash
-17. detectWikiTrigger             â† Wikipedia RAG search
-18. detectBrowserTrigger          â† in-UI browser panel
-19. detectFuzzyToolIntent         â† catch near-miss transcriptions before falling through to LLM
-20. appendMessage + sendToOllama  â† normal LLM path (catch-all)
+1.  journalMode active check      ← MUST be first (gates all mic presses in journal mode)
+2.  ideasMode active check        ← MUST be second (gates next mic press in ideas mode)
+3.  _fuzzyConfirmMode check       ← resolve pending tool confirmation before any new trigger fires
+4.  _matchesExitPhrase            ← dossier exit
+5.  _parseTrigger                 ← dossier open
+6.  detectJournalStartTrigger     ← enter journal dictation mode
+7.  detectJournalReadTrigger      ← journal read / search / delete
+8.  detectIdeaCaptureTrigger      ← enter ideas capture mode
+9.  detectIdeaReadTrigger         ← ideas list / search / discard / clear
+10. detectTimerTrigger            ← timer set / cancel / status
+11. detectTimeTrigger             ← time / date query
+12. detectWeatherTrigger          ← weather forecast
+13. detectCalendarTrigger         ← calendar schedule
+14. detectNewsTrigger             ← news briefing
+15. detectMarketTrigger           ← stocks / crypto
+16. detectGmailTrigger            ← Gmail inbox / open / summarise / trash
+17. detectWikiTrigger             ← Wikipedia RAG search
+18. detectBrowserTrigger          ← in-UI browser panel
+19. detectFuzzyToolIntent         ← catch near-miss transcriptions before falling through to LLM
+20. appendMessage + sendToOllama  ← normal LLM path (catch-all)
 ```
 
 ---
@@ -1386,11 +1394,11 @@ Package S.T.A.R.L.I.N.G. as a standalone desktop application - no browser, no te
 #### Step 2 - Electron main process: window + lifecycle
 
 - [ ] Write `electron/main.js` with the following responsibilities:
-  - `app.whenReady()` â†’ call `spawnBackend()`, then `spawnLlamaServer()`, then `pollUntilReady()`, then `createWindow()`
-  - `createWindow()`: create a frameless (or default) `BrowserWindow` (1 280 Ã— 800, min 900 Ã— 600); load `http://localhost:8000`; show only after `did-finish-load` fires to avoid a white flash
-  - `app.on('before-quit')` and `app.on('window-all-closed')`: kill both child processes gracefully (`SIGTERM` â†’ wait 2 s â†’ `SIGKILL`)
+  - `app.whenReady()` → call `spawnBackend()`, then `spawnLlamaServer()`, then `pollUntilReady()`, then `createWindow()`
+  - `createWindow()`: create a frameless (or default) `BrowserWindow` (1 280 × 800, min 900 × 600); load `http://localhost:8000`; show only after `did-finish-load` fires to avoid a white flash
+  - `app.on('before-quit')` and `app.on('window-all-closed')`: kill both child processes gracefully (`SIGTERM` → wait 2 s → `SIGKILL`)
 - [ ] Add a system tray icon: right-click menu with "Open", "Restart backend", "Quit"
-  - Tray icon asset: create a 16 Ã— 16 and 32 Ã— 32 PNG in `assets/images/tray-icon.png`
+  - Tray icon asset: create a 16 × 16 and 32 × 32 PNG in `assets/images/tray-icon.png`
 - [ ] Wire `app.on('activate')` (macOS dock click) to re-show the window if it exists but is hidden
 
 #### Step 3 - Freeze the Python backend with PyInstaller
@@ -1433,9 +1441,9 @@ Package S.T.A.R.L.I.N.G. as a standalone desktop application - no browser, no te
 #### Step 6 - preload.js and IPC
 
 - [ ] Write `electron/preload.js` with `contextBridge.exposeInMainWorld('starling', {...})` exposing:
-  - `getAppVersion()` â†’ `app.getVersion()` via IPC
-  - `openLogsFolder()` â†’ `shell.openPath(app.getPath('logs'))` - lets the user inspect llama/backend logs from the UI settings panel
-  - `openDocumentFolder(path)` â†’ `shell.openPath(path)` - for the future RAG document folder
+  - `getAppVersion()` → `app.getVersion()` via IPC
+  - `openLogsFolder()` → `shell.openPath(app.getPath('logs'))` - lets the user inspect llama/backend logs from the UI settings panel
+  - `openDocumentFolder(path)` → `shell.openPath(path)` - for the future RAG document folder
 - [ ] Wire the "Open Logs" button (add to settings panel in a future pass) to call `window.starling.openLogsFolder()`
 - [ ] Keep `nodeIntegration: false` and `contextIsolation: true` in `BrowserWindow` webPreferences - never expose Node APIs directly to the renderer
 
@@ -1444,7 +1452,7 @@ Package S.T.A.R.L.I.N.G. as a standalone desktop application - no browser, no te
 - [ ] If the GGUF model is too large to bundle in the installer (>2 GB), implement a first-run download flow:
   - On first launch, check if model file exists in `app.getPath('userData')/models/`
   - If not, show a modal (`BrowserWindow` or `dialog`) explaining the download (~2 GB), then stream it with `net.request` to `userData/models/` showing progress
-  - Write download progress back to the renderer via `ipcMain` â†’ `webContents.send('download-progress', pct)`
+  - Write download progress back to the renderer via `ipcMain` → `webContents.send('download-progress', pct)`
   - Once complete, proceed with normal startup; model path is written into the resolved `.env`
 
 #### Step 8 - Package with electron-builder
@@ -1464,13 +1472,13 @@ Package S.T.A.R.L.I.N.G. as a standalone desktop application - no browser, no te
     "linux": { "target": "AppImage", "icon": "assets/images/icon.png" }
   }
   ```
-- [ ] Add a `make dist` Makefile target that runs the full chain: `make build-backend` â†’ `npx electron-builder --win` (adjust platform flag per OS)
+- [ ] Add a `make dist` Makefile target that runs the full chain: `make build-backend` → `npx electron-builder --win` (adjust platform flag per OS)
 - [ ] Test the NSIS installer on a clean Windows machine with no Python, Node, or CUDA toolkit installed - only the NVIDIA driver should be required
 - [ ] Add `electron-updater` (`npm install electron-updater`) and a `latest.yml` publish target pointing at a GitHub Releases feed - enables auto-update prompts on launch
 
 #### Phase 9 maintenance notes (Electron)
 
-- **`setup.sh`** - add `npm install` step at the end (skip if `node_modules/` already exists); add a check for Node â‰¥ 18
+- **`setup.sh`** - add `npm install` step at the end (skip if `node_modules/` already exists); add a check for Node ≥ 18
 - **`Makefile`** - add `electron-dev`, `build-backend`, and `dist` targets; document in `make help`
 - **`.env.example`** - add `ELECTRON_DEV=true` flag (when set, Electron skips spawning backend/llama-server and assumes they are already running - useful during development)
 - **`scripts/test_integration.py`** - no changes needed; integration tests continue to run against the standalone backend and are still valid for the frozen binary
@@ -1491,15 +1499,15 @@ Approaches considered for resolved issues - retained for reference in case issue
 **Resolution**: Kokoro and Whisper now run on GPU; `onnxruntime-gpu` and CUDA libraries confirmed working.
 
 ### Issue #5 - Cold-start delay (✅ Resolved)
-**Resolution**: on page load, `warmupModels()` synthesises the greeting via Kokoro (heats the ONNX/CUDA session), posts the resulting WAV to `/transcribe` (heats the Whisper CUDA session), then awaits `fetchSystemStatus()` before transitioning to ONLINE. The UI shows `INITIALISINGâ€¦` and the sphere enters the `WARMING UP` state until the full sequence completes.
+**Resolution**: on page load, `warmupModels()` synthesises the greeting via Kokoro (heats the ONNX/CUDA session), posts the resulting WAV to `/transcribe` (heats the Whisper CUDA session), then awaits `fetchSystemStatus()` before transitioning to ONLINE. The UI shows `INITIALISING…` and the sphere enters the `WARMING UP` state until the full sequence completes.
 
 **Approaches considered (ranked by effort at time of investigation):**
 - **Warm-up ping on page load** *(implemented - adapted)*: synthesise the greeting text via `/synthesize` and post the result to `/transcribe`; both sessions are live before the user speaks
 - **Silent audio warm-up for Whisper**: generate a short (0.5 s) silent WAV blob using `OfflineAudioContext` and POST to `/transcribe` - superseded by using the real greeting WAV
 - **Backend `/warmup` endpoint**: a dedicated `GET /warmup` route in `main.py` running dummy inference through all three pipelines - not needed given the frontend approach
-- **Lazy import â†’ eager import in backend**: move model loading to module-level so Uvicorn startup triggers initialisation - deferred; current approach is sufficient
+- **Lazy import → eager import in backend**: move model loading to module-level so Uvicorn startup triggers initialisation - deferred; current approach is sufficient
 - **FastAPI `startup` event for all models**: `@app.on_event("startup")` handler calling warm-up logic for all three pipelines - deferred; covered by frontend warm-up
-- **Show `WARMING UP` state in HUD** *(implemented)*: sphere enters thinking animation and status shows `INIT...`; greeting text held as `INITIALISINGâ€¦` until sequence completes
+- **Show `WARMING UP` state in HUD** *(implemented)*: sphere enters thinking animation and status shows `INIT...`; greeting text held as `INITIALISING…` until sequence completes
 
 ---
 

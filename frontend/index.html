@@ -391,9 +391,37 @@
     </footer>
 
   </div>
+  <!-- Browser Panel -->
+  <div id="browser-panel" class="browser-panel hidden">
+    <div class="browser-toolbar">
+      <button id="browser-back" title="Back">&#8592;</button>
+      <button id="browser-forward" title="Forward">&#8594;</button>
+      <button id="browser-refresh" title="Refresh">&#8635;</button>
+      <input id="browser-url-bar" type="text" spellcheck="false" />
+      <button id="browser-go">Go</button>
+      <button id="browser-close" title="Close">&#x2715;</button>
+    </div>
+
+    <div id="browser-iframe-container">
+      <iframe
+        id="browser-frame"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+        referrerpolicy="no-referrer"
+      ></iframe>
+    </div>
+
+    <div id="browser-fallback" class="hidden">
+      <p>This site can&#8217;t be displayed here due to its security policy.</p>
+      <a id="browser-external-link" target="_blank" rel="noopener noreferrer"></a>
+    </div>
+  </div>
+
+  <!-- Browser overlay (click outside to close) -->
+  <div id="browser-overlay" class="browser-overlay hidden"></div>
+
   <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-  <script type="module" src="app.js?v=4"></script>
+  <script type="module" src="app.js?v=5"></script>
 </body>
 </html>
