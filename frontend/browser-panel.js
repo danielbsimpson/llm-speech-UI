@@ -191,8 +191,11 @@ async function _fetchPageText(url) {
   try {
     const res  = await fetch(`${BACKEND_BASE}/api/browser/page-text?url=${encodeURIComponent(url)}`);
     const data = await res.json();
+    if (data.error) console.error('[browser-panel] page-text error from backend:', data.error);
     if (data.text && url === _currentUrl) _pageText = data.text;
-  } catch { /* silently ignore — context simply won't be available for this page */ }
+  } catch (err) {
+    console.error('[browser-panel] page-text fetch failed — is the backend running?', err.message);
+  }
 }
 
 // ── Toolbar event listeners ───────────────────────────────────────────────────

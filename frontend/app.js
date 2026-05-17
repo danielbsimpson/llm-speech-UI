@@ -1465,19 +1465,27 @@ async function _routeInput(text) {
   }
 
   appendMessage('user', text);
-  let _pageCtx = null;
+  let _extraContext = null;
   if (isBrowserPanelOpen()) {
-    // Await page text — fetches on-demand if the background load hasn't completed yet.
-    _pageCtx = await ensureBrowserPageText();
+    const _pageCtx = await ensureBrowserPageText();
+    if (_pageCtx) {
+      _extraContext =
+        `The user is currently viewing a webpage in the browser panel. ` +
+        `The full text content of that page is provided below. ` +
+        `When the user asks you to summarize, explain, analyse, or answer questions, ` +
+        `use this page content as your primary source — do not rely on prior knowledge ` +
+        `unless the page content is insufficient.\n\nPAGE CONTENT:\n${_pageCtx}`;
+    } else if (getBrowserPageUrl()) {
+      // Page text unavailable (backend down or fetch failed) — at least surface the URL
+      // so the LLM knows what page the user is referring to.
+      _extraContext =
+        `The user currently has a browser panel open showing: ${getBrowserPageUrl()}. ` +
+        `The page content could not be read at this time. ` +
+        `If the user refers to "the page", "this", "the content", or asks you to summarize, ` +
+        `they mean that page — acknowledge it and answer from your training knowledge about that topic.`;
+    }
   }
-  await sendToOllama(text, _pageCtx ? {
-    extraContext:
-      `The user is currently viewing a webpage in the browser panel. ` +
-      `The full text content of that page is provided below. ` +
-      `When the user asks you to summarize, explain, analyse, or answer questions, ` +
-      `use this page content as your primary source — do not rely on prior knowledge ` +
-      `unless the page content is insufficient.\n\nPAGE CONTENT:\n${_pageCtx}`,
-  } : {});
+  await sendToOllama(text, _extraContext ? { extraContext: _extraContext } : {});
   fetchSystemStatus();
 }
 
