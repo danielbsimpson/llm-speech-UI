@@ -38,7 +38,7 @@ Microphone → Speech-to-Text → llama-server (LLM on GPU) → Text-to-Speech �
 ## Planned Tool Kit (Phase 11)
 
 A suite of voice-activated tools built as self-contained dispatch intercepts — none modify
-the core chat pipeline. Tools 1–5 are complete; 6–12 are planned.
+the core chat pipeline. Tools 1–5 and 7 are complete; Tools 6, 8–12 are planned.
 
 | # | Tool | Backend | Status |
 |---|---|---|---|
@@ -102,26 +102,39 @@ llm-speech-UI/
 ├── frontend/               # UI — HTML/CSS/JS + Three.js
 │   ├── index.html
 │   ├── style.css
-│   └── app.js
+│   ├── config.js           # Shared config (BACKEND_BASE)
+│   ├── app.js              # Main application logic and voice dispatch router
+│   ├── browser-panel.js    # Tool: in-UI browser panel
+│   ├── news-panel.js       # Tool: news briefing panel
+│   ├── stocks-panel.js     # Tool: stocks & crypto panel
+│   ├── timer-panel.js      # Tool: voice-activated timers
+│   └── weather-panel.js    # Tool: weather forecast panel
 ├── backend/                # FastAPI server
-│   ├── main.py
+│   ├── main.py             # App entry point, router registration, system-status
 │   ├── stt.py              # Speech-to-text via faster-whisper
-│   ├── tts.py              # Text-to-speech via Kokoro
+│   ├── tts.py              # Text-to-speech via Kokoro ONNX
 │   ├── llama_server.py     # llama-server streaming relay (DEFAULT, LLM_BACKEND=llama)
 │   ├── ollama.py           # Ollama streaming relay (fallback, LLM_BACKEND=ollama)
-│   └── rag.py              # RAG module — ingest, retrieve, format, status
-├── memory/
-│   └── input/              # Drop .md / .txt files here; run 'make rag-ingest' to index
+│   ├── rag.py              # RAG module — ingest, retrieve, format, status
+│   ├── browser.py          # Browser page-text extraction endpoint
+│   ├── news.py             # News briefing endpoint (RSS / feedparser)
+│   ├── stocks.py           # Stocks & crypto market data endpoint (yfinance)
+│   ├── weather.py          # Weather forecast endpoint (Open-Meteo)
+│   └── memory/             # Runtime data — caches and ChromaDB
+│       ├── input/          # Drop .md / .txt files here; run 'make rag-ingest' to index
+│       └── chroma_db/      # Vector store (auto-created on first ingest)
 ├── assets/
 │   ├── images/
 │   │   └── manifest.json           # Subject → image / dossier mapping for presentation mode
 │   ├── dossier_images/             # Subject portrait images
 │   └── dossier_descriptions/       # Structured subject profiles (.md files)
+├── toolkit/                # Voice trigger reference and tool documentation
+│   ├── README.md           # Per-tool screenshots, trigger phrases, and implementation notes
+│   └── TRIGGER_PHRASES.md  # Full voice command reference with dispatch priority order
 ├── markdown/               # Implementation guides for planned and completed features
 │   ├── TODO.md             # Full phased build checklist (Phases 1–11)
-│   ├── STOCKS.md           # Tool: stocks & crypto panel
+│   ├── TOOL_AWARENESS.md   # Notes on tool detection and dispatch chain design
 │   ├── WAKE_WORD.md        # Tool: wake word ("Hey Starling") + interrupt
-│   ├── WEBCALL.md          # Tool: in-UI browser panel
 │   ├── IDEAS_TRACKER.md    # Tool: voice ideas capture & review
 │   ├── JOURNAL.md          # Tool: multi-turn voice journal
 │   ├── WIKIPEDIA.md        # Tool: Wikipedia RAG Q&A
@@ -130,10 +143,14 @@ llm-speech-UI/
 │   └── complete/           # Guides for already-implemented features
 │       ├── IDEAS.md        # (general improvement brainstorm log)
 │       ├── RAG_IMPLEMENTATION.md
-│       ├── TIME.md             # Tool: time & date queries
-│       ├── TIMER.md            # Tool: voice-activated timers
-│       ├── WEATHER.md          # Tool: weather forecast panel
-│       └── NEWS.md             # Tool: news briefing panel
+│       ├── RSS_FEEDS.md    # RSS feed sources and configuration reference
+│       ├── TIME.md         # Tool: time & date queries
+│       ├── TIMER.md        # Tool: voice-activated timers
+│       ├── WEATHER.md      # Tool: weather forecast panel
+│       ├── NEWS.md         # Tool: news briefing panel
+│       ├── STOCKS.md       # Tool: stocks & crypto panel
+│       └── WEBCALL.md      # Tool: in-UI browser panel
+├── models/                 # Local model files (e.g., kokoro-v1.0.onnx)
 ├── scripts/
 │   ├── setup.sh                # One-shot install script
 │   ├── download_models.py      # Download Kokoro model files
@@ -212,7 +229,7 @@ Each tool in the planned toolkit follows the same pattern. To add, say, Weather:
 3. Create `frontend/weather-panel.js` and add the intercept block to `app.js`
 4. Add the panel HTML and CSS to `index.html` / `style.css`
 
-See [`markdown/WEATHER.md`](./markdown/WEATHER.md) for the full step-by-step guide.
+See [`markdown/complete/WEATHER.md`](./markdown/complete/WEATHER.md) for the full step-by-step guide.
 Every other tool has its own equivalent guide in `markdown/`.
 
 ---
@@ -438,6 +455,7 @@ To use Whisper, set `STT_ENGINE=whisper` in `.env` and ensure the FastAPI backen
 | `/news` | GET | News headlines (RSS) |
 | `/stocks` | GET | Live price data for configured watchlist (equities + crypto); 5-min cache |
 | `/stocks/cache` | DELETE | Bust the stocks cache for an immediate re-fetch |
+| `/api/browser/page-text` | POST | Extract plain text from a URL for LLM context injection |
 | `/ideas/add` | POST | Save a new idea |
 | `/ideas` | GET / DELETE | List or clear all ideas |
 | `/ideas/{id}` | DELETE | Delete one idea by id |
