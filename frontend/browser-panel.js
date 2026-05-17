@@ -7,9 +7,13 @@ const KNOWN_BLOCKED_DOMAINS = [
   'amazon.com', 'netflix.com',
 ];
 
+const BACKEND_BASE = 'http://localhost:8000';
+
 // ── State ─────────────────────────────────────────────────────────────────────
 
-let _isOpen = false;
+let _isOpen     = false;
+let _pageText   = null;   // extracted plain-text of current page (null while fetching or closed)
+let _currentUrl = null;   // last URL we navigated to
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 
@@ -28,6 +32,21 @@ const iframeBox  = document.getElementById('browser-iframe-container');
  */
 export function isBrowserPanelOpen() {
   return _isOpen;
+}
+
+/**
+ * Returns the extracted plain-text of the currently loaded page, or null if unavailable.
+ * Used by app.js to inject page context into the LLM when the user asks a question.
+ */
+export function getBrowserPageText() {
+  return _pageText;
+}
+
+/**
+ * Returns the URL currently loaded in the panel, or null.
+ */
+export function getBrowserPageUrl() {
+  return _currentUrl;
 }
 
 /**
@@ -98,7 +117,9 @@ export function openBrowserPanel(url) {
  */
 export function closeBrowserPanel() {
   if (!_isOpen) return;
-  _isOpen = false;
+  _isOpen     = false;
+  _pageText   = null;
+  _currentUrl = null;
   starlingEl.classList.remove('browser-mode');
   frame.src = 'about:blank';
   _showIframe();
@@ -134,6 +155,8 @@ function _showFallback(url) {
 }
 
 function _navigateTo(url) {
+  _currentUrl  = url;
+  _pageText    = null;  // clear until the page finishes loading
   urlBar.value = url;
   extLink.href = url;
 
@@ -146,6 +169,18 @@ function _navigateTo(url) {
   frame.src     = url;
   // Catches same-origin network failures; cross-origin X-Frame-Options blocks are silent.
   frame.onerror = () => _showFallback(url);
+}
+
+/**
+ * Fetch extracted page text from the backend for the given URL.
+ * Only stores the result if the URL is still current when the response arrives.
+ */
+async function _fetchPageText(url) {
+  try {
+    const res  = await fetch(`${BACKEND_BASE}/api/browser/page-text?url=${encodeURIComponent(url)}`);
+    const data = await res.json();
+    if (data.text && url === _currentUrl) _pageText = data.text;
+  } catch { /* silently ignore — context simply won't be available for this page */ }
 }
 
 // ── Toolbar event listeners ───────────────────────────────────────────────────
@@ -170,5 +205,28 @@ document.getElementById('browser-go').addEventListener('click', () => {
 
 urlBar.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') _navigateTo(_resolveUrl(urlBar.value.trim()));
+});
+
+// ── Page-text extraction on every frame load ──────────────────────────────────
+// The load event fires each time the iframe navigates (initial load + in-frame links).
+// We try to read the real URL from the frame (works for same-origin navigation);
+// cross-origin navigations fall back to _currentUrl (the last URL we explicitly set).
+frame.addEventListener('load', () => {
+  let url = _currentUrl;
+
+  // Attempt to get the actual current URL (throws for cross-origin — expected)
+  try {
+    const href = frame.contentWindow?.location?.href;
+    if (href && href !== 'about:blank') {
+      url = href;
+      if (url !== _currentUrl) {
+        _currentUrl  = url;
+        urlBar.value = url;
+      }
+    }
+  } catch { /* cross-origin restriction — use _currentUrl */ }
+
+  if (!_isOpen || !url || url === 'about:blank') { _pageText = null; return; }
+  _fetchPageText(url);
 });
 

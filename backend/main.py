@@ -37,6 +37,7 @@ else:
 from weather import router as weather_router
 from news import router as news_router
 from stocks import router as stocks_router
+from browser import router as browser_router
 
 app.include_router(stt_router)
 app.include_router(llm_router)
@@ -44,6 +45,7 @@ app.include_router(tts_router)
 app.include_router(weather_router)
 app.include_router(news_router)
 app.include_router(stocks_router)
+app.include_router(browser_router, prefix='/api')
 
 
 @app.get("/health")

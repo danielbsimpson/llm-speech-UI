@@ -3,7 +3,7 @@ import { detectTimerTrigger, handleTimerTrigger, initTimerPanel, dismissTimerPan
 import { detectWeatherTrigger, openWeatherPanel, closeWeatherPanel, initWeatherPanel, startWeatherAutoDismiss } from './weather-panel.js';
 import { detectNewsTrigger, openNewsPanel, closeNewsPanel } from './news-panel.js';
 import { detectMarketTrigger, openMarketPanel, closeMarketPanel, setSendToOllama as _setMktSendToOllama, setOnClose as _setMktOnClose } from './stocks-panel.js';
-import { detectBrowserTrigger, detectBrowserClose, isBrowserPanelOpen, openBrowserPanel, closeBrowserPanel } from './browser-panel.js';
+import { detectBrowserTrigger, detectBrowserClose, isBrowserPanelOpen, openBrowserPanel, closeBrowserPanel, getBrowserPageText } from './browser-panel.js';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const BACKEND_BASE = 'http://localhost:8000';
@@ -937,7 +937,7 @@ function appendMessage(role, content) {
 
 // ── Ollama streaming chat ─────────────────────────────────────────────────────
 async function sendToOllama(userText, options = {}) {
-  const { ephemeralMessages = null } = options;
+  const { ephemeralMessages = null, extraContext = null } = options;
 
   let messages;
   if (ephemeralMessages) {
@@ -946,7 +946,11 @@ async function sendToOllama(userText, options = {}) {
     messages = [...ephemeralMessages, { role: 'user', content: userText }];
   } else {
     conversationHistory.push({ role: 'user', content: userText });
-    messages = conversationHistory;
+    // extraContext injects a temporary system message (e.g. page text) at the top
+    // without permanently storing it in conversationHistory.
+    messages = extraContext
+      ? [{ role: 'system', content: extraContext }, ...conversationHistory]
+      : conversationHistory;
   }
 
   const { wrap, txt } = appendMessage('assistant', '');
@@ -1459,7 +1463,11 @@ async function _routeInput(text) {
   }
 
   appendMessage('user', text);
-  await sendToOllama(text);
+  const _pageCtx = isBrowserPanelOpen() ? getBrowserPageText() : null;
+  await sendToOllama(text, _pageCtx ? {
+    extraContext: `The user is currently viewing a webpage in the browser panel. ` +
+                  `Here is the extracted page content for context:\n\n${_pageCtx}`,
+  } : {});
   fetchSystemStatus();
 }
 
