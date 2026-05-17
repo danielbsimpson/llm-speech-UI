@@ -538,7 +538,6 @@ function dismissAllToolPanels() {
   closeWeatherPanel();
   exitNewsMode();
   exitMarketMode();
-  closeBrowserPanel();
 }
 
 /**
@@ -1298,11 +1297,11 @@ function _speakBrowser(text) {
 // Handles all trigger intercepts; falls through to the LLM for unmatched input.
 // Called by both handleSend (text path) and mediaRecorder.onstop (voice path).
 async function _routeInput(text) {
-  const _wasBrowserOpen = isBrowserPanelOpen();
   dismissAllToolPanels();
 
   // ── Browser close phrase ────────────────────────────────────────────────────
-  if (_wasBrowserOpen && detectBrowserClose(text)) {
+  if (isBrowserPanelOpen() && detectBrowserClose(text)) {
+    closeBrowserPanel();
     appendMessage('user', text);
     const ack = 'Browser closed.';
     const { txt } = appendMessage('assistant', ack);
@@ -1318,6 +1317,7 @@ async function _routeInput(text) {
   }
   const _triggerResult = _parseTrigger(text);
   if (_triggerResult.matched) {
+    closeBrowserPanel();
     enterPresMode(_triggerResult.subject);
     setState('idle');
     return;
@@ -1344,6 +1344,7 @@ async function _routeInput(text) {
 
   const _wxTrigger = detectWeatherTrigger(text);
   if (_wxTrigger) {
+    closeBrowserPanel();
     setState('thinking');
     appendMessage('user', text);
     const wxResult = await openWeatherPanel(_wxTrigger.location);
@@ -1381,6 +1382,7 @@ async function _routeInput(text) {
   // ── Market / stocks / crypto intercept (checked before news — more specific) ──
   const mktTrigger = detectMarketTrigger(text);
   if (mktTrigger) {
+    closeBrowserPanel();
     setState('thinking');
     appendMessage('user', text);
     const filterMap = { stocks: 'equity', crypto: 'crypto', all: 'all' };
@@ -1412,6 +1414,7 @@ async function _routeInput(text) {
 
   const newsCategory = detectNewsTrigger(text);
   if (newsCategory) {
+    closeBrowserPanel();
     setState('thinking');
     appendMessage('user', text);
     const newsContext = await openNewsPanel(newsCategory);
@@ -1444,7 +1447,7 @@ async function _routeInput(text) {
     appendMessage('user', text);
     openBrowserPanel(_browserTrigger.url);
     await sendToOllama(
-      `The user asked to open ${_browserTrigger.label}. Acknowledge in one short natural sentence.`,
+      `The user has opened ${_browserTrigger.label} in the browser panel. In two sentences: first confirm it is open, then invite them to ask you anything about what they are viewing or the topic.`,
       {
         ephemeralMessages: [
           { role: 'system', content: SYSTEM_PROMPT },

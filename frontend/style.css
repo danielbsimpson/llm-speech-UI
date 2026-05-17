@@ -1969,33 +1969,54 @@ a.news-story-source-title:hover {
 
 /* ── Browser Panel ─────────────────────────────────────────────────────────── */
 
-.browser-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.55);
-  z-index: 900;
-}
-
+/* Default: collapsed as a zero-width flex sibling in .body-cols */
 .browser-panel {
-  position: fixed;
-  top: 5vh;
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(90vw, 1100px);
-  height: 85vh;
-  background: #0e0e0e;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
+  flex-shrink: 0;
+  width: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  z-index: 901;
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.7);
+  background: #0e0e0e;
+  transition: width 0.4s ease;
+}
+
+/* ── Browser-mode layout (mirrors weather-mode / pres-mode) ─────────────── */
+.starling.browser-mode .col-left {
+  width: 37%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: 16px;
+  transform: none;
   overflow: hidden;
 }
 
-.browser-panel.hidden,
-.browser-overlay.hidden {
-  display: none;
+.starling.browser-mode .col-left .ring-section {
+  width: auto;
+}
+
+.starling.browser-mode .ring-section {
+  transform: translateY(-10px);
+  transition: transform 0.5s ease;
+}
+
+.starling.browser-mode .col-left .chat-panel {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  max-height: none;
+  opacity: 0.85;
+}
+
+.starling.browser-mode .col-left .msg {
+  font-size: 10px;
+  line-height: 1.45;
+  padding: 4px 0;
+}
+
+.starling.browser-mode .browser-panel {
+  width: 63%;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .browser-toolbar {

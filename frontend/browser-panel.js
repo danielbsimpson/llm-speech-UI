@@ -13,13 +13,13 @@ let _isOpen = false;
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 
-const panel     = document.getElementById('browser-panel');
-const overlay   = document.getElementById('browser-overlay');
-const frame     = document.getElementById('browser-frame');
-const urlBar    = document.getElementById('browser-url-bar');
-const fallback  = document.getElementById('browser-fallback');
-const extLink   = document.getElementById('browser-external-link');
-const iframeBox = document.getElementById('browser-iframe-container');
+const starlingEl = document.querySelector('.starling');
+const panel      = document.getElementById('browser-panel');
+const frame      = document.getElementById('browser-frame');
+const urlBar     = document.getElementById('browser-url-bar');
+const fallback   = document.getElementById('browser-fallback');
+const extLink    = document.getElementById('browser-external-link');
+const iframeBox  = document.getElementById('browser-iframe-container');
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
@@ -51,26 +51,24 @@ export function detectBrowserTrigger(transcript) {
     };
   }
 
-  // "open https://example.com" — full URL with scheme
-  const fullUrl = t.match(/(?:open|go to|navigate to|show me|load)\s+(https?:\/\/\S+)/i);
-  if (fullUrl) {
-    const url = fullUrl[1];
+  // "open browser https://example.com" or "open browser example.com"
+  const openBrowserFull = t.match(/open\s+browser\s+(https?:\/\/\S+)/i);
+  if (openBrowserFull) {
+    const url = openBrowserFull[1];
     return { url, label: url.replace(/^https?:\/\//, '') };
   }
-
-  // "open example.com" — bare domain (requires at least one dot and a recognisable TLD)
-  const bareDomain = t.match(/(?:open|go to|navigate to|show me|load)\s+([\w-]+(?:\.[\w-]+)+\.\w{2,}(?:\/\S*)?)/i);
-  if (bareDomain) {
-    const url = `https://${bareDomain[1]}`;
-    return { url, label: bareDomain[1] };
+  const openBrowserDomain = t.match(/open\s+browser\s+([\w-]+(?:\.[\w-]+)+\.\w{2,}(?:\/\S*)?)/i);
+  if (openBrowserDomain) {
+    const url = `https://${openBrowserDomain[1]}`;
+    return { url, label: openBrowserDomain[1] };
   }
 
-  // "search for X" — DuckDuckGo fallback (iframe-friendly); must start with "search"
-  const searchMatch = t.match(/^search(?:\s+for)?\s+(.+)/i);
+  // "browser search for X" / "browser search X" — DuckDuckGo plain-HTML endpoint (iframe-friendly)
+  const searchMatch = t.match(/browser\s+search(?:\s+for)?\s+(.+)/i);
   if (searchMatch) {
     const query = searchMatch[1].trim();
     return {
-      url:   `https://duckduckgo.com/?q=${encodeURIComponent(query)}`,
+      url:   `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
       label: `a DuckDuckGo search for "${query}"`,
     };
   }
@@ -101,8 +99,7 @@ export function openBrowserPanel(url) {
 export function closeBrowserPanel() {
   if (!_isOpen) return;
   _isOpen = false;
-  panel.classList.add('hidden');
-  overlay.classList.add('hidden');
+  starlingEl.classList.remove('browser-mode');
   frame.src = 'about:blank';
   _showIframe();
 }
@@ -115,12 +112,13 @@ function _resolveUrl(raw) {
 }
 
 function _isKnownBlocked(url) {
+  // DuckDuckGo's plain-HTML search endpoint is embeddable; only block the main site
+  if (/^https:\/\/html\.duckduckgo\.com\/html\//.test(url)) return false;
   return KNOWN_BLOCKED_DOMAINS.some(domain => url.includes(domain));
 }
 
 function _showPanel() {
-  panel.classList.remove('hidden');
-  overlay.classList.remove('hidden');
+  starlingEl.classList.add('browser-mode');
 }
 
 function _showIframe() {
@@ -153,7 +151,6 @@ function _navigateTo(url) {
 // ── Toolbar event listeners ───────────────────────────────────────────────────
 
 document.getElementById('browser-close').addEventListener('click', closeBrowserPanel);
-overlay.addEventListener('click', closeBrowserPanel);
 
 document.getElementById('browser-refresh').addEventListener('click', () => {
   if (frame.src && frame.src !== 'about:blank') frame.src = frame.src;
@@ -174,3 +171,4 @@ document.getElementById('browser-go').addEventListener('click', () => {
 urlBar.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') _navigateTo(_resolveUrl(urlBar.value.trim()));
 });
+
